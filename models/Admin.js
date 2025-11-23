@@ -29,6 +29,9 @@ const adminSchema = new mongoose.Schema({
     manageQueries: { type: Boolean, default: false },
     manageBanners: { type: Boolean, default: false },
     manageNotifications: { type: Boolean, default: false },
+    manageFaqs: { type: Boolean, default: false },
+    manageNewsletter: { type: Boolean, default: false },
+    manageContactUs: { type: Boolean, default: false },
   },
   createdBy: {
     type: mongoose.Schema.Types.ObjectId,

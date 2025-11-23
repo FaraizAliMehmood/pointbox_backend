@@ -17,9 +17,9 @@ const bannerSchema = new mongoose.Schema({
     type: String,
     required: [true, 'Banner image is required'],
   },
-  // publicId:{
-  //   type: String
-  // },
+  public_id:{
+    type: String
+  },
 startDate:{
   type: String
 },

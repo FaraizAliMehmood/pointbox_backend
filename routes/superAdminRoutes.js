@@ -85,7 +85,7 @@ router.post('/notifications', protectSuperAdmin, createNotification);
 router.get('/notifications', protectSuperAdmin, getNotifications);
 router.delete('/notifications/:id', protectSuperAdmin, deleteNotification);
 
-router.post('/banners', protectSuperAdmin, uploadBanner);
+router.post('/banners', protectSuperAdmin, uploadSingle, uploadBanner);
 router.get('/banners', protectSuperAdmin, getBanners);
 router.get('/web/banners', getBanners);
 router.put('/banners/:id', protectSuperAdmin, uploadSingle, updateBanner);

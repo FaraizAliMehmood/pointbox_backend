@@ -798,17 +798,31 @@ exports.deleteNotification = async (req, res) => {
 // @access  Private (Super Admin)
 exports.uploadBanner = async (req, res) => {
   try {
-    // if (!req.file) {
-    //   return res.status(400).json({ success: false, message: 'Please upload an image' });
-    // }
+    if (!req.file) {
+      return res.status(400).json({ success: false, message: 'Please upload an image' });
+    }
 
-   // const result = await uploadToCloudinary(req.file.buffer, 'banners');
+    let imageUrl = '';
+    let publicId = '';
+
+    // Upload image to Cloudinary if provided
+    try {
+      const result = await uploadToCloudinary(req.file.buffer, 'banners');
+      imageUrl = result.secure_url;
+      publicId = result.public_id;
+    } catch (uploadError) {
+      return res.status(400).json({ 
+        success: false, 
+        message: `Failed to upload image: ${uploadError.message}` 
+      });
+    }
 
     const banner = await Banner.create({
       title: req.body.title,
       description: req.body.description,
       badge: req.body.badge,
-      imageUrl: req.body.imageUrl,
+      imageUrl: imageUrl,
+      public_id: publicId,
       startDate: req.body.startDate,
       endDate: req.body.endDate,
       type: req.body.type,
@@ -847,19 +861,37 @@ exports.updateBanner = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Banner not found' });
     }
 
+    // Handle image upload if provided
     if (req.file) {
-      // Delete old image from Cloudinary
-      if (banner.image) {
-        const publicId = banner.image.split('/').slice(-2).join('/').split('.')[0];
-        await deleteFromCloudinary(publicId);
-      }
+      try {
+        // Delete old image from Cloudinary if it exists
+        if (banner.public_id) {
+          await deleteFromCloudinary(banner.public_id);
+        }
 
-      // Upload new image
-      const result = await uploadToCloudinary(req.file.buffer, 'banners');
-      banner.image = result.secure_url;
+        // Upload new image to Cloudinary
+        const result = await uploadToCloudinary(req.file.buffer, 'banners');
+        banner.imageUrl = result.secure_url;
+        banner.public_id = result.public_id;
+      } catch (uploadError) {
+        return res.status(400).json({ 
+          success: false, 
+          message: `Failed to upload image: ${uploadError.message}` 
+        });
+      }
     }
 
-    Object.assign(banner, req.body);
+    // Update other fields from req.body
+    const { title, description, badge, startDate, endDate, type, isActive } = req.body;
+    
+    if (title !== undefined) banner.title = title;
+    if (description !== undefined) banner.description = description;
+    if (badge !== undefined) banner.badge = badge;
+    if (startDate !== undefined) banner.startDate = startDate;
+    if (endDate !== undefined) banner.endDate = endDate;
+    if (type !== undefined) banner.type = type;
+    if (isActive !== undefined) banner.isActive = isActive;
+
     await banner.save();
 
     res.json({ success: true, data: banner });
@@ -879,10 +911,14 @@ exports.deleteBanner = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Banner not found' });
     }
 
-    // Delete image from Cloudinary
-    if (banner.image) {
-      const publicId = banner.image.split('/').slice(-2).join('/').split('.')[0];
-      await deleteFromCloudinary(publicId);
+    // Delete image from Cloudinary if it exists
+    if (banner.public_id) {
+      try {
+        await deleteFromCloudinary(banner.public_id);
+      } catch (deleteError) {
+        console.error('Error deleting image from Cloudinary:', deleteError);
+        // Continue with deletion even if Cloudinary deletion fails
+      }
     }
 
     await banner.deleteOne();
