@@ -27,6 +27,30 @@ const settingsSchema = new mongoose.Schema({
   publicId:{
     type: String
   },
+  instagram: {
+    type: String,
+    trim: true,
+  },
+  facebook: {
+    type: String,
+    trim: true,
+  },
+  x: {
+    type: String,
+    trim: true,
+  },
+  youtube: {
+    type: String,
+    trim: true,
+  },
+  tiktok: {
+    type: String,
+    trim: true,
+  },
+  linkedin: {
+    type: String,
+    trim: true,
+  },
  
 }, {
   timestamps: true,

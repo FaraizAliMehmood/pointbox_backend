@@ -97,7 +97,7 @@ exports.getSettings = async (req, res) => {
 // @access  Private (Super Admin)
 exports.updateSettings = async (req, res) => {
   try {
-    const { termsCondition, address, phone, email, location } = req.body;
+    const { termsCondition, address, phone, email, location, instagram, facebook, x, youtube, tiktok, linkedin } = req.body;
 
     // Find existing settings or create new one
     let settings = await Settings.findOne();
@@ -109,6 +109,12 @@ exports.updateSettings = async (req, res) => {
       if (phone !== undefined) settings.phone = phone;
       if (email !== undefined) settings.email = email;
       if (location !== undefined) settings.location = location;
+      if (instagram !== undefined) settings.instagram = instagram;
+      if (facebook !== undefined) settings.facebook = facebook;
+      if (x !== undefined) settings.x = x;
+      if (youtube !== undefined) settings.youtube = youtube;
+      if (tiktok !== undefined) settings.tiktok = tiktok;
+      if (linkedin !== undefined) settings.linkedin = linkedin;
 
       await settings.save();
     } else {
@@ -129,6 +135,12 @@ exports.updateSettings = async (req, res) => {
         phone: phone || '',
         email: email || '',
         location: location || '',
+        instagram: instagram || '',
+        facebook: facebook || '',
+        x: x || '',
+        youtube: youtube || '',
+        tiktok: tiktok || '',
+        linkedin: linkedin || '',
         logoUrl: 'https://via.placeholder.com/150', // Placeholder - will be replaced when logo is uploaded
         publicId: '',
       });

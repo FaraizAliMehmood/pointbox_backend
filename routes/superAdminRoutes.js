@@ -105,6 +105,7 @@ router.delete('/newsletters/:id', protectSuperAdmin, deleteNewsletter);
 
 router.get('/newsletter-emails', protectSuperAdmin, getNewsletterEmails);
 router.post('/newsletter-emails', protectSuperAdmin, createNewsletterEmail);
+router.post('/web/newsletter-emails', createNewsletterEmail);
 router.get('/newsletter-emails/:id', protectSuperAdmin, getNewsletterEmailById);
 router.put('/newsletter-emails/:id', protectSuperAdmin, updateNewsletterEmail);
 router.delete('/newsletter-emails/:id', protectSuperAdmin, deleteNewsletterEmail);
