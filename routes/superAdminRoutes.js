@@ -45,7 +45,7 @@ const {
   getSuperAdmins,
   updateSuperAdminPassword,
   getContacts,
-  respondToContact
+
 } = require('../controllers/superAdminController');
 const { protectSuperAdmin } = require('../middleware/auth');
 const { uploadSingle, uploadLogo } = require('../middleware/upload');
@@ -91,30 +91,30 @@ router.get('/web/banners', getBanners);
 router.put('/banners/:id', protectSuperAdmin, uploadSingle, updateBanner);
 router.delete('/banners/:id', protectSuperAdmin, deleteBanner);
 
-router.get('/faqs', protectSuperAdmin, getFAQs);
+router.get('/faqs', getFAQs);
 router.get('/web/faqs', getFAQs);
-router.post('/faqs', protectSuperAdmin, createFAQ);
-router.put('/faqs/:id', protectSuperAdmin, updateFAQ);
-router.delete('/faqs/:id', protectSuperAdmin, deleteFAQ);
+router.post('/faqs', createFAQ);
+router.put('/faqs/:id', updateFAQ);
+router.delete('/faqs/:id', deleteFAQ);
 
-router.post('/newsletters', protectSuperAdmin, uploadSingle, createNewsletter);
-router.get('/newsletters', protectSuperAdmin, getNewsletters);
+router.post('/newsletters', uploadSingle, createNewsletter);
+router.get('/newsletters', getNewsletters);
 router.get('/web/newsletters',getNewsletters);
-router.put('/newsletters/:id', protectSuperAdmin, uploadSingle, updateNewsletter);
-router.delete('/newsletters/:id', protectSuperAdmin, deleteNewsletter);
+router.put('/newsletters/:id', uploadSingle, updateNewsletter);
+router.delete('/newsletters/:id', deleteNewsletter);
 
-router.get('/newsletter-emails', protectSuperAdmin, getNewsletterEmails);
-router.post('/newsletter-emails', protectSuperAdmin, createNewsletterEmail);
+router.get('/newsletter-emails', getNewsletterEmails);
+router.post('/newsletter-emails', createNewsletterEmail);
 router.post('/web/newsletter-emails', createNewsletterEmail);
-router.get('/newsletter-emails/:id', protectSuperAdmin, getNewsletterEmailById);
-router.put('/newsletter-emails/:id', protectSuperAdmin, updateNewsletterEmail);
-router.delete('/newsletter-emails/:id', protectSuperAdmin, deleteNewsletterEmail);
+router.get('/newsletter-emails/:id', getNewsletterEmailById);
+router.put('/newsletter-emails/:id', updateNewsletterEmail);
+router.delete('/newsletter-emails/:id', deleteNewsletterEmail);
 
 // Super Admin management routes
 router.get('/super-admins', protectSuperAdmin, getSuperAdmins);
 router.put('/super-admins/:id/password', protectSuperAdmin, updateSuperAdminPassword);
 
-router.get("/contacts", protectSuperAdmin, getContacts);
+router.get("/contacts", getContacts);
 // router.post("/contacts/:id/respond", protectSuperAdmin, respondToContact);
 
 module.exports = router;

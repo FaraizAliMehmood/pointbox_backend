@@ -2,9 +2,13 @@ const Admin = require('../models/Admin');
 const Company = require('../models/Company');
 const Employee = require('../models/Employee');
 const Customer = require('../models/Customer');
+const Contact = require("../models/Contact");
 const Transaction = require('../models/Transaction');
 const Banner = require('../models/Banner');
 const Query = require('../models/Query');
+const FAQ = require("../models/FAQ");
+const NewsLetters = require('../models/NewsLetters');
+const NewsLetterEmails = require('../models/NewsLetterEmails');
 const Notification = require('../models/Notification');
 const bcrypt = require('bcryptjs');
 const { generateToken } = require('../middleware/auth');
@@ -786,4 +790,500 @@ exports.updateAdminPassword = async (req, res) => {
     res.status(400).json({ success: false, message: error.message });
   }
 };
+
+
+// @desc    Create Newsletter Email
+// @route   POST /api/superadmin/newsletter-emails
+// @access  Private (Super Admin)
+exports.createNewsletterEmail = async (req, res) => {
+  try {
+    const { email, source } = req.body;
+
+    if (!email) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Email is required' 
+      });
+    }
+
+    // Check if email already exists
+    const existingEmail = await NewsLetterEmails.findOne({ email: email.toLowerCase().trim() });
+    if (existingEmail) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'This email is already subscribed' 
+      });
+    }
+
+    const newsletterEmail = await NewsLetterEmails.create({
+      email: email.toLowerCase().trim(),
+      source: source || 'manual',
+      isActive: true,
+    });
+
+    res.status(201).json({
+      success: true,
+      data: newsletterEmail,
+    });
+  } catch (error) {
+    // Handle duplicate key error (unique constraint)
+    if (error.code === 11000) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'This email is already subscribed' 
+      });
+    }
+    res.status(400).json({ success: false, message: error.message });
+  }
+};
+
+// @desc    Update Newsletter Email (toggle active status or update other fields)
+// @route   PUT /api/superadmin/newsletter-emails/:id
+// @access  Private (Super Admin)
+exports.updateNewsletterEmail = async (req, res) => {
+  try {
+    const { isActive, source } = req.body;
+    const newsletterEmail = await NewsLetterEmails.findById(req.params.id);
+
+    if (!newsletterEmail) {
+      return res.status(404).json({ success: false, message: 'Newsletter email not found' });
+    }
+
+    if (isActive !== undefined) {
+      newsletterEmail.isActive = isActive;
+    }
+
+    if (source !== undefined) {
+      newsletterEmail.source = source;
+    }
+
+    await newsletterEmail.save();
+
+    res.json({ success: true, data: newsletterEmail });
+  } catch (error) {
+    res.status(400).json({ success: false, message: error.message });
+  }
+};
+
+// @desc    Delete Newsletter Email
+// @route   DELETE /api/superadmin/newsletter-emails/:id
+// @access  Private (Super Admin)
+exports.deleteNewsletterEmail = async (req, res) => {
+  try {
+    const newsletterEmail = await NewsLetterEmails.findByIdAndDelete(req.params.id);
+
+    if (!newsletterEmail) {
+      return res.status(404).json({ success: false, message: 'Newsletter email not found' });
+    }
+
+    res.json({ success: true, message: 'Newsletter email deleted successfully' });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// @desc    Get Newsletter Email by ID
+// @route   GET /api/superadmin/newsletter-emails/:id
+// @access  Private (Super Admin)
+exports.getNewsletterEmailById = async (req, res) => {
+  try {
+    const newsletterEmail = await NewsLetterEmails.findById(req.params.id);
+
+    if (!newsletterEmail) {
+      return res.status(404).json({ success: false, message: 'Newsletter email not found' });
+    }
+
+    res.json({ success: true, data: newsletterEmail });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+
+// @desc    Get all FAQs
+// @route   GET /api/superadmin/faqs
+// @access  Private (Super Admin)
+exports.getFAQs = async (req, res) => {
+  try {
+    const faqs = await FAQ.find().sort({ order: 1, createdAt: -1 });
+    res.json({ success: true, data: faqs });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// @desc    Create FAQ
+// @route   POST /api/superadmin/faqs
+// @access  Private (Super Admin)
+exports.createFAQ = async (req, res) => {
+  try {
+    const { question, answer, category, isActive} = req.body;
+    if (!question || !answer) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Question and answer are required' 
+      });
+    }
+
+    const faq = await FAQ.create({
+      question,
+      answer,
+      category: category || 'general',
+      isActive: isActive !== undefined ? isActive : true,
+      createdBy: req.user._id,
+    });
+
+    res.status(201).json({
+      success: true,
+      data: faq,
+    });
+  } catch (error) {
+    res.status(400).json({ success: false, message: error.message });
+  }
+};
+
+// @desc    Update FAQ
+// @route   PUT /api/superadmin/faqs/:id
+// @access  Private (Super Admin)
+exports.updateFAQ = async (req, res) => {
+  try {
+    const { question, answer, category, isActive, order } = req.body;
+
+    const faq = await FAQ.findById(req.params.id);
+
+    if (!faq) {
+      return res.status(404).json({ success: false, message: 'FAQ not found' });
+    }
+
+    if (question !== undefined) faq.question = question;
+    if (answer !== undefined) faq.answer = answer;
+    if (category !== undefined) faq.category = category;
+    if (isActive !== undefined) faq.isActive = isActive;
+    if (order !== undefined) faq.order = order;
+
+    await faq.save();
+
+    res.json({ success: true, data: faq });
+  } catch (error) {
+    res.status(400).json({ success: false, message: error.message });
+  }
+};
+
+// @desc    Delete FAQ
+// @route   DELETE /api/superadmin/faqs/:id
+// @access  Private (Super Admin)
+exports.deleteFAQ = async (req, res) => {
+  try {
+    const faq = await FAQ.findByIdAndDelete(req.params.id);
+
+    if (!faq) {
+      return res.status(404).json({ success: false, message: 'FAQ not found' });
+    }
+
+    res.json({ success: true, message: 'FAQ deleted successfully' });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// @desc    Create Newsletter
+// @route   POST /api/superadmin/newsletters
+// @access  Private (Super Admin)
+exports.createNewsletter = async (req, res) => {
+  try {
+    const { title, description, isActive } = req.body;
+
+    if (!title) {
+      return res.status(400).json({ success: false, message: 'Title is required' });
+    }
+
+    let imageUrl = '';
+    let publicId = '';
+
+    // Upload image to Cloudinary if provided
+    if (req.file) {
+      try {
+        const result = await uploadToCloudinary(req.file.buffer, 'newsletters');
+        imageUrl = result.secure_url;
+        publicId = result.public_id;
+      } catch (uploadError) {
+        return res.status(400).json({ 
+          success: false, 
+          message: `Failed to upload image: ${uploadError.message}` 
+        });
+      }
+    } else {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Newsletter image is required' 
+      });
+    }
+
+    const newsletter = await NewsLetters.create({
+      title,
+      description: description || '',
+      imageUrl,
+      publicId,
+      isActive: isActive !== undefined ? isActive : true,
+      createdBy: req.user._id,
+    });
+
+    res.status(201).json({
+      success: true,
+      data: newsletter,
+    });
+  } catch (error) {
+    res.status(400).json({ success: false, message: error.message });
+  }
+};
+
+// @desc    Get all Newsletters
+// @route   GET /api/superadmin/newsletters
+// @access  Private (Super Admin)
+exports.getNewsletters = async (req, res) => {
+  try {
+    const newsletters = await NewsLetters.find()
+      .populate('createdBy', 'username email')
+      .sort({ createdAt: -1 });
+    res.json({ success: true, data: newsletters });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// @desc    Update Newsletter
+// @route   PUT /api/superadmin/newsletters/:id
+// @access  Private (Super Admin)
+exports.updateNewsletter = async (req, res) => {
+  try {
+    const newsletter = await NewsLetters.findById(req.params.id);
+
+    if (!newsletter) {
+      return res.status(404).json({ success: false, message: 'Newsletter not found' });
+    }
+
+    // Handle image upload if provided
+    if (req.file) {
+      try {
+        // Delete old image from Cloudinary if it exists
+        if (newsletter.publicId) {
+          await deleteFromCloudinary(newsletter.publicId);
+        }
+
+        // Upload new image to Cloudinary
+        const result = await uploadToCloudinary(req.file.buffer, 'newsletters');
+        newsletter.imageUrl = result.secure_url;
+        newsletter.publicId = result.public_id;
+      } catch (uploadError) {
+        return res.status(400).json({ 
+          success: false, 
+          message: `Failed to upload image: ${uploadError.message}` 
+        });
+      }
+    }
+
+    // Update other fields from req.body
+    const { title, description, isActive } = req.body;
+    
+    if (title !== undefined) newsletter.title = title;
+    if (description !== undefined) newsletter.description = description;
+    if (isActive !== undefined) newsletter.isActive = isActive;
+
+    await newsletter.save();
+
+    res.json({ success: true, data: newsletter });
+  } catch (error) {
+    res.status(400).json({ success: false, message: error.message });
+  }
+};
+
+// @desc    Delete Newsletter
+// @route   DELETE /api/superadmin/newsletters/:id
+// @access  Private (Super Admin)
+exports.deleteNewsletter = async (req, res) => {
+  try {
+    const newsletter = await NewsLetters.findById(req.params.id);
+
+    if (!newsletter) {
+      return res.status(404).json({ success: false, message: 'Newsletter not found' });
+    }
+
+    // Delete image from Cloudinary if it exists
+    if (newsletter.publicId) {
+      try {
+        await deleteFromCloudinary(newsletter.publicId);
+      } catch (deleteError) {
+        console.error('Error deleting image from Cloudinary:', deleteError);
+        // Continue with deletion even if Cloudinary deletion fails
+      }
+    }
+
+    await newsletter.deleteOne();
+
+    res.json({ success: true, message: 'Newsletter deleted successfully' });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// @desc    Get all Newsletter Emails
+// @route   GET /api/superadmin/newsletter-emails
+// @access  Private (Super Admin)
+exports.getNewsletterEmails = async (req, res) => {
+  try {
+    const { search, source, isActive } = req.query;
+    let query = {};
+
+    // Filter by source if provided
+    if (source) {
+      query.source = source;
+    }
+
+    // Filter by isActive if provided
+    if (isActive !== undefined) {
+      query.isActive = isActive === 'true';
+    }
+
+    // Search filter (case-insensitive search on email and source)
+    // Combine with existing filters using $and
+    if (search) {
+      const searchCondition = {
+        $or: [
+          { email: { $regex: search, $options: 'i' } },
+          { source: { $regex: search, $options: 'i' } },
+        ]
+      };
+      
+      // If there are existing filters, use $and to combine them
+      if (Object.keys(query).length > 0) {
+        query = { $and: [query, searchCondition] };
+      } else {
+        query = searchCondition;
+      }
+    }
+
+    const newsletterEmails = await NewsLetterEmails.find(query).sort({ createdAt: -1 });
+
+    res.json({ success: true, data: newsletterEmails });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// @desc    Create Newsletter Email
+// @route   POST /api/superadmin/newsletter-emails
+// @access  Private (Super Admin)
+exports.createNewsletterEmail = async (req, res) => {
+  try {
+    const { email, source } = req.body;
+
+    if (!email) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Email is required' 
+      });
+    }
+
+    // Check if email already exists
+    const existingEmail = await NewsLetterEmails.findOne({ email: email.toLowerCase().trim() });
+    if (existingEmail) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'This email is already subscribed' 
+      });
+    }
+
+    const newsletterEmail = await NewsLetterEmails.create({
+      email: email.toLowerCase().trim(),
+      source: source || 'manual',
+      isActive: true,
+    });
+
+    res.status(201).json({
+      success: true,
+      data: newsletterEmail,
+    });
+  } catch (error) {
+    // Handle duplicate key error (unique constraint)
+    if (error.code === 11000) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'This email is already subscribed' 
+      });
+    }
+    res.status(400).json({ success: false, message: error.message });
+  }
+};
+
+// @desc    Update Newsletter Email (toggle active status or update other fields)
+// @route   PUT /api/superadmin/newsletter-emails/:id
+// @access  Private (Super Admin)
+exports.updateNewsletterEmail = async (req, res) => {
+  try {
+    const { isActive, source } = req.body;
+    const newsletterEmail = await NewsLetterEmails.findById(req.params.id);
+
+    if (!newsletterEmail) {
+      return res.status(404).json({ success: false, message: 'Newsletter email not found' });
+    }
+
+    if (isActive !== undefined) {
+      newsletterEmail.isActive = isActive;
+    }
+
+    if (source !== undefined) {
+      newsletterEmail.source = source;
+    }
+
+    await newsletterEmail.save();
+
+    res.json({ success: true, data: newsletterEmail });
+  } catch (error) {
+    res.status(400).json({ success: false, message: error.message });
+  }
+};
+
+// @desc    Delete Newsletter Email
+// @route   DELETE /api/superadmin/newsletter-emails/:id
+// @access  Private (Super Admin)
+exports.deleteNewsletterEmail = async (req, res) => {
+  try {
+    const newsletterEmail = await NewsLetterEmails.findByIdAndDelete(req.params.id);
+
+    if (!newsletterEmail) {
+      return res.status(404).json({ success: false, message: 'Newsletter email not found' });
+    }
+
+    res.json({ success: true, message: 'Newsletter email deleted successfully' });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// @desc    Get Newsletter Email by ID
+// @route   GET /api/superadmin/newsletter-emails/:id
+// @access  Private (Super Admin)
+exports.getNewsletterEmailById = async (req, res) => {
+  try {
+    const newsletterEmail = await NewsLetterEmails.findById(req.params.id);
+
+    if (!newsletterEmail) {
+      return res.status(404).json({ success: false, message: 'Newsletter email not found' });
+    }
+
+    res.json({ success: true, data: newsletterEmail });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+exports.getContacts = async (req, res) => {
+  try {
+    const contacts = await Contact.find().sort({ createdAt: -1 });
+    res.status(200).json({ success: true, data: contacts });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
 

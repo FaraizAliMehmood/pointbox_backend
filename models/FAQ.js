@@ -1,5 +1,4 @@
 const mongoose = require('mongoose');
-
 const faqSchema = new mongoose.Schema({
   question: {
     type: String,
@@ -19,12 +18,7 @@ const faqSchema = new mongoose.Schema({
   isActive: {
     type: Boolean,
     default: true,
-  },
-  createdBy: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'SuperAdmin',
-    required: true,
-  },
+  }
 }, {
   timestamps: true,
 });

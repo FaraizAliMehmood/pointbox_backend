@@ -1,6 +1,4 @@
 const mongoose = require('mongoose');
-const bcrypt = require('bcryptjs');
-
 const adminSchema = new mongoose.Schema({
   username: {
     type: String,
@@ -32,11 +30,6 @@ const adminSchema = new mongoose.Schema({
     manageFaqs: { type: Boolean, default: false },
     manageNewsletter: { type: Boolean, default: false },
     manageContactUs: { type: Boolean, default: false },
-  },
-  createdBy: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'SuperAdmin',
-    required: true,
   },
   isActive: {
     type: Boolean,

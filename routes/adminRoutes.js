@@ -25,12 +25,43 @@ const {
   updateBanner,
   deleteBanner,
   updateAdminPassword,
+  getFAQs,
+  createFAQ,
+  updateFAQ,
+  deleteFAQ,
+  createNewsletter,
+  getNewsletters,
+  updateNewsletter,
+  deleteNewsletter,
+  getNewsletterEmails,
+  createNewsletterEmail,
+  updateNewsletterEmail,
+  deleteNewsletterEmail,
+  getNewsletterEmailById,
+  getContacts
 } = require('../controllers/adminController');
 const { protectAdmin } = require('../middleware/auth');
-const { uploadLogo } = require('../middleware/upload');
+const { uploadLogo, uploadSingle } = require('../middleware/upload');
 
 // Public route - Login (no authentication required)
 router.post('/login', login);
+router.get("/contacts", getContacts);
+router.get('/faqs', getFAQs);
+router.post('/faqs', createFAQ);
+router.put('/faqs/:id', updateFAQ);
+router.delete('/faqs/:id', deleteFAQ);
+router.post('/newsletters', uploadSingle, createNewsletter);
+router.get('/newsletters', getNewsletters);
+router.get('/web/newsletters',getNewsletters);
+router.put('/newsletters/:id', uploadSingle, updateNewsletter);
+router.delete('/newsletters/:id', deleteNewsletter);
+
+router.get('/newsletter-emails', getNewsletterEmails);
+router.post('/newsletter-emails', createNewsletterEmail);
+router.post('/web/newsletter-emails', createNewsletterEmail);
+router.get('/newsletter-emails/:id', getNewsletterEmailById);
+router.put('/newsletter-emails/:id', updateNewsletterEmail);
+router.delete('/newsletter-emails/:id', deleteNewsletterEmail);
 
 // Protected routes - All require admin authentication
 router.use(protectAdmin);
@@ -73,6 +104,10 @@ router.delete('/banners/:id', deleteBanner);
 
 // Admin password change route
 router.put('/change-password/:id', updateAdminPassword);
+
+
+
+
 
 module.exports = router;
 
