@@ -23,8 +23,13 @@ const newsLetterSchema = new mongoose.Schema({
   },
   createdBy: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: 'SuperAdmin',
+    refPath: 'createdByModel',
     required: true,
+  },
+  createdByModel: {
+    type: String,
+    enum: ['SuperAdmin', 'Admin'],
+    default: 'SuperAdmin',
   },
 }, {
   timestamps: true,

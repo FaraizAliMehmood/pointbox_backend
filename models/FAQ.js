@@ -18,7 +18,17 @@ const faqSchema = new mongoose.Schema({
   isActive: {
     type: Boolean,
     default: true,
-  }
+  },
+  createdBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    refPath: 'createdByModel',
+    required: true,
+  },
+  createdByModel: {
+    type: String,
+    enum: ['SuperAdmin', 'Admin'],
+    default: 'SuperAdmin',
+  },
 }, {
   timestamps: true,
 });

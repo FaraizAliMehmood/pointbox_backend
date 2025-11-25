@@ -101,13 +101,12 @@ exports.createAdmin = async (req, res) => {
     const { username, email, password, permissions } = req.body;
     
     // Validate required fields
-    if (!username || !email || !password) {
+    if (!email || !password) {
       return res.status(400).json({ 
         success: false, 
         message: 'Username, email, and password are required.' 
       });
     }
-
     const existingAdmin = await Admin.findOne({ email });
     if (existingAdmin) {
       return res.status(400).json({ 
@@ -122,8 +121,7 @@ exports.createAdmin = async (req, res) => {
       username,
       email,
       password: hashedPassword,
-      permissions: permissions || {},
-      createdBy: req.user._id
+      permissions: permissions || {}
     });
 
     const token = generateToken(newAdmin._id, 'admin');
@@ -150,7 +148,7 @@ exports.createAdmin = async (req, res) => {
 // @access  Private (Super Admin)
 exports.getAdmins = async (req, res) => {
   try {
-    const admins = await Admin.find().populate('createdBy', 'username email');
+    const admins = await Admin.find();
     res.json({ success: true, data: admins });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
@@ -409,6 +407,28 @@ exports.updateCompany = async (req, res) => {
     if (country !== undefined) company.country = country;
 
     await company.save();
+
+    res.json({ success: true, data: company });
+  } catch (error) {
+    res.status(400).json({ success: false, message: error.message });
+  }
+};
+
+// @desc    Toggle Company Status (Activate/Deactivate)
+// @route   PUT /api/superadmin/companies/:id/status
+// @access  Private (Super Admin)
+exports.toggleCompanyStatus = async (req, res) => {
+  try {
+    const { isActive } = req.body;
+    const company = await Company.findByIdAndUpdate(
+      req.params.id,
+      { isActive },
+      { new: true }
+    );
+
+    if (!company) {
+      return res.status(404).json({ success: false, message: 'Company not found' });
+    }
 
     res.json({ success: true, data: company });
   } catch (error) {
@@ -1226,6 +1246,7 @@ exports.createNewsletterEmail = async (req, res) => {
       email: email.toLowerCase().trim(),
       source: source || 'manual',
       isActive: true,
+      createdBy: req.user._id
     });
 
     res.status(201).json({

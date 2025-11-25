@@ -190,6 +190,32 @@ exports.updateCompany = async (req, res) => {
   }
 };
 
+// @desc    Toggle Company Status
+// @route   PUT /api/admin/companies/:id/status
+// @access  Private (Admin with manageCompanies permission)
+exports.toggleCompanyStatus = async (req, res) => {
+  try {
+    if (!checkPermission(req.user, 'manageCompanies')) {
+      return res.status(403).json({ success: false, message: 'You do not have permission to manage companies' });
+    }
+
+    const { isActive } = req.body;
+    const company = await Company.findByIdAndUpdate(
+      req.params.id,
+      { isActive },
+      { new: true }
+    );
+
+    if (!company) {
+      return res.status(404).json({ success: false, message: 'Company not found' });
+    }
+
+    res.json({ success: true, data: company });
+  } catch (error) {
+    res.status(400).json({ success: false, message: error.message });
+  }
+};
+
 // @desc    Delete Company
 // @route   DELETE /api/admin/companies/:id
 // @access  Private (Admin with manageCompanies permission)
@@ -659,14 +685,36 @@ exports.uploadBanner = async (req, res) => {
       return res.status(403).json({ success: false, message: 'You do not have permission to manage banners' });
     }
 
+    if (!req.file) {
+      return res.status(400).json({ success: false, message: 'Please upload an image' });
+    }
+
+    let imageUrl = '';
+    let publicId = '';
+
+    // Upload image to Cloudinary if provided
+    try {
+      const result = await uploadToCloudinary(req.file.buffer, 'banners');
+      imageUrl = result.secure_url;
+      publicId = result.public_id;
+    } catch (uploadError) {
+      return res.status(400).json({ 
+        success: false, 
+        message: `Failed to upload image: ${uploadError.message}` 
+      });
+    }
+
     const banner = await Banner.create({
       title: req.body.title,
       description: req.body.description,
       badge: req.body.badge,
-      imageUrl: req.body.imageUrl,
+      imageUrl: imageUrl,
+      public_id: publicId,
+      productUrl: req.body.productUrl,
       startDate: req.body.startDate,
       endDate: req.body.endDate,
       type: req.body.type || 'regular',
+      isActive: req.body.isActive !== undefined ? req.body.isActive === 'true' : true,
       createdBy: req.user._id,
       createdByModel: 'Admin',
     });
@@ -695,15 +743,35 @@ exports.updateBanner = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Banner not found' });
     }
 
+    // Upload new image if provided
+    if (req.file) {
+      try {
+        // Delete old image from Cloudinary if exists
+        if (banner.public_id) {
+          await deleteFromCloudinary(banner.public_id);
+        }
+        
+        // Upload new image
+        const result = await uploadToCloudinary(req.file.buffer, 'banners');
+        banner.imageUrl = result.secure_url;
+        banner.public_id = result.public_id;
+      } catch (uploadError) {
+        return res.status(400).json({ 
+          success: false, 
+          message: `Failed to upload image: ${uploadError.message}` 
+        });
+      }
+    }
+
     // Update fields
     if (req.body.title) banner.title = req.body.title;
     if (req.body.description !== undefined) banner.description = req.body.description;
     if (req.body.badge !== undefined) banner.badge = req.body.badge;
-    if (req.body.imageUrl) banner.imageUrl = req.body.imageUrl;
+    if (req.body.productUrl !== undefined) banner.productUrl = req.body.productUrl;
     if (req.body.startDate) banner.startDate = req.body.startDate;
     if (req.body.endDate) banner.endDate = req.body.endDate;
     if (req.body.type) banner.type = req.body.type;
-    if (req.body.isActive !== undefined) banner.isActive = req.body.isActive;
+    if (req.body.isActive !== undefined) banner.isActive = req.body.isActive === 'true' || req.body.isActive === true;
 
     await banner.save();
 
@@ -799,6 +867,8 @@ exports.createNewsletterEmail = async (req, res) => {
   try {
     const { email, source } = req.body;
 
+    console.log(req.user._id);
+
     if (!email) {
       return res.status(400).json({ 
         success: false, 
@@ -819,6 +889,7 @@ exports.createNewsletterEmail = async (req, res) => {
       email: email.toLowerCase().trim(),
       source: source || 'manual',
       isActive: true,
+      createdBy: req.user._id
     });
 
     res.status(201).json({
@@ -1177,6 +1248,13 @@ exports.createNewsletterEmail = async (req, res) => {
   try {
     const { email, source } = req.body;
 
+    if (!req.user || !req.user._id) {
+      return res.status(401).json({ 
+        success: false, 
+        message: 'User not authenticated' 
+      });
+    }
+
     if (!email) {
       return res.status(400).json({ 
         success: false, 
@@ -1197,6 +1275,8 @@ exports.createNewsletterEmail = async (req, res) => {
       email: email.toLowerCase().trim(),
       source: source || 'manual',
       isActive: true,
+      createdBy: req.user._id,
+      createdByModel: 'Admin',
     });
 
     res.status(201).json({

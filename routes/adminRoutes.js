@@ -24,6 +24,7 @@ const {
   uploadBanner,
   updateBanner,
   deleteBanner,
+  toggleCompanyStatus,
   updateAdminPassword,
   getFAQs,
   createFAQ,
@@ -46,22 +47,22 @@ const { uploadLogo, uploadSingle } = require('../middleware/upload');
 // Public route - Login (no authentication required)
 router.post('/login', login);
 router.get("/contacts", getContacts);
-router.get('/faqs', getFAQs);
-router.post('/faqs', createFAQ);
-router.put('/faqs/:id', updateFAQ);
-router.delete('/faqs/:id', deleteFAQ);
-router.post('/newsletters', uploadSingle, createNewsletter);
-router.get('/newsletters', getNewsletters);
-router.get('/web/newsletters',getNewsletters);
-router.put('/newsletters/:id', uploadSingle, updateNewsletter);
-router.delete('/newsletters/:id', deleteNewsletter);
+router.get('/faqs',protectAdmin, getFAQs);
+router.post('/faqs',protectAdmin , createFAQ);
+router.put('/faqs/:id',protectAdmin , updateFAQ);
+router.delete('/faqs/:id',protectAdmin , deleteFAQ);
+router.post('/newsletters',protectAdmin, uploadSingle, createNewsletter);
+router.get('/newsletters',protectAdmin, getNewsletters);
+router.get('/web/newsletters',protectAdmin, getNewsletters);
+router.put('/newsletters/:id',protectAdmin, uploadSingle, updateNewsletter);
+router.delete('/newsletters/:id',protectAdmin, deleteNewsletter);
 
-router.get('/newsletter-emails', getNewsletterEmails);
-router.post('/newsletter-emails', createNewsletterEmail);
-router.post('/web/newsletter-emails', createNewsletterEmail);
-router.get('/newsletter-emails/:id', getNewsletterEmailById);
-router.put('/newsletter-emails/:id', updateNewsletterEmail);
-router.delete('/newsletter-emails/:id', deleteNewsletterEmail);
+router.get('/newsletter-emails',protectAdmin, getNewsletterEmails);
+router.post('/newsletter-emails',protectAdmin, createNewsletterEmail);
+router.post('/web/newsletter-emails',protectAdmin, createNewsletterEmail);
+router.get('/newsletter-emails/:id',protectAdmin, getNewsletterEmailById);
+router.put('/newsletter-emails/:id',protectAdmin, updateNewsletterEmail);
+router.delete('/newsletter-emails/:id',protectAdmin, deleteNewsletterEmail);
 
 // Protected routes - All require admin authentication
 router.use(protectAdmin);
@@ -70,6 +71,7 @@ router.use(protectAdmin);
 router.get('/companies', getCompanies);
 router.post('/companies', uploadLogo, createCompany);
 router.put('/companies/:id', uploadLogo, updateCompany);
+router.put('/companies/:id/status', toggleCompanyStatus);
 router.delete('/companies/:id', deleteCompany);
 
 // Employee routes
@@ -98,8 +100,8 @@ router.delete('/notifications/:id', deleteNotification);
 
 // Banner routes
 router.get('/banners', getBanners);
-router.post('/banners', uploadBanner);
-router.put('/banners/:id', updateBanner);
+router.post('/banners', uploadSingle, uploadBanner);
+router.put('/banners/:id', uploadSingle, updateBanner);
 router.delete('/banners/:id', deleteBanner);
 
 // Admin password change route

@@ -13,6 +13,7 @@ const {
   createCompany,
   getCompanies,
   updateCompany,
+  toggleCompanyStatus,
   deleteCompany,
   getQueries,
   respondToQuery,
@@ -68,6 +69,7 @@ router.post('/companies', protectSuperAdmin, uploadLogo, createCompany);
 router.get('/companies', protectSuperAdmin, getCompanies);
 router.get('/web/companies', getCompanies);
 router.put('/companies/:id', protectSuperAdmin, uploadLogo, updateCompany);
+router.put('/companies/:id/status', protectSuperAdmin, toggleCompanyStatus);
 router.delete('/companies/:id', protectSuperAdmin, deleteCompany);
 
 router.get('/queries', protectSuperAdmin, getQueries);
@@ -91,24 +93,24 @@ router.get('/web/banners', getBanners);
 router.put('/banners/:id', protectSuperAdmin, uploadSingle, updateBanner);
 router.delete('/banners/:id', protectSuperAdmin, deleteBanner);
 
-router.get('/faqs', getFAQs);
+router.get('/faqs',protectSuperAdmin, getFAQs);
 router.get('/web/faqs', getFAQs);
-router.post('/faqs', createFAQ);
-router.put('/faqs/:id', updateFAQ);
-router.delete('/faqs/:id', deleteFAQ);
+router.post('/faqs',protectSuperAdmin, createFAQ);
+router.put('/faqs/:id',protectSuperAdmin, updateFAQ);
+router.delete('/faqs/:id',protectSuperAdmin, deleteFAQ);
 
-router.post('/newsletters', uploadSingle, createNewsletter);
-router.get('/newsletters', getNewsletters);
-router.get('/web/newsletters',getNewsletters);
-router.put('/newsletters/:id', uploadSingle, updateNewsletter);
-router.delete('/newsletters/:id', deleteNewsletter);
+router.post('/newsletters',protectSuperAdmin, uploadSingle, createNewsletter);
+router.get('/newsletters',protectSuperAdmin, getNewsletters);
+router.get('/web/newsletters',protectSuperAdmin,getNewsletters);
+router.put('/newsletters/:id',protectSuperAdmin,uploadSingle, updateNewsletter);
+router.delete('/newsletters/:id',protectSuperAdmin, deleteNewsletter);
 
-router.get('/newsletter-emails', getNewsletterEmails);
-router.post('/newsletter-emails', createNewsletterEmail);
-router.post('/web/newsletter-emails', createNewsletterEmail);
-router.get('/newsletter-emails/:id', getNewsletterEmailById);
-router.put('/newsletter-emails/:id', updateNewsletterEmail);
-router.delete('/newsletter-emails/:id', deleteNewsletterEmail);
+router.get('/newsletter-emails',protectSuperAdmin, getNewsletterEmails);
+router.post('/newsletter-emails',protectSuperAdmin, createNewsletterEmail);
+router.post('/web/newsletter-emails',protectSuperAdmin, createNewsletterEmail);
+router.get('/newsletter-emails/:id',protectSuperAdmin, getNewsletterEmailById);
+router.put('/newsletter-emails/:id',protectSuperAdmin, updateNewsletterEmail);
+router.delete('/newsletter-emails/:id',protectSuperAdmin, deleteNewsletterEmail);
 
 // Super Admin management routes
 router.get('/super-admins', protectSuperAdmin, getSuperAdmins);
