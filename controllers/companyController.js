@@ -227,6 +227,59 @@ exports.updateCompany = async (req, res) => {
   }
 };
 
+// @desc    Change Company Password
+// @route   PUT /api/company/change-password
+// @access  Private (Company)
+exports.changePassword = async (req, res) => {
+  try {
+    const { currentPassword, newPassword } = req.body;
+
+    // Validate required fields
+    if (!currentPassword || !newPassword) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Current password and new password are required' 
+      });
+    }
+
+    // Validate new password length
+    if (newPassword.length < 6) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'New password must be at least 6 characters long' 
+      });
+    }
+
+    // Find the company and include password field
+    const company = await Company.findById(req.user._id).select('+password');
+
+    if (!company) {
+      return res.status(404).json({ success: false, message: 'Company not found' });
+    }
+
+    // Verify current password
+    const isPasswordCorrect = await bcrypt.compare(currentPassword, company.password);
+    if (!isPasswordCorrect) {
+      return res.status(401).json({ 
+        success: false, 
+        message: 'Current password is incorrect' 
+      });
+    }
+
+    // Hash and update password
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+    company.password = hashedPassword;
+    await company.save();
+
+    res.json({
+      success: true,
+      message: 'Password changed successfully'
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
 // @desc    Create Customer
 // @route   POST /api/company/customers
 // @access  Private (Company)
@@ -397,7 +450,7 @@ exports.uploadProduct = async (req, res) => {
 // @desc    Get all Products
 // @route   GET /api/company/products
 // @access  Private (Company)
-exports.getProducts = async (req, res) => {
+exports.getProductsFromCompany = async (req, res) => {
   try {
     const products = await Product.find({ company: req.user._id });
     res.json({ success: true, data: products });
@@ -407,6 +460,7 @@ exports.getProducts = async (req, res) => {
 };
 exports.getProducts = async (req, res) => {
   try {
+    console.log("product is calling from the company panel")
     const products = await Product.find({ company: req.body.id });
     res.json({ success: true, data: products });
   } catch (error) {
@@ -593,7 +647,7 @@ exports.exportCustomers = async (req, res) => {
 // @access  Private (Company)
 exports.createEmployee = async (req, res) => {
   try {
-    const { name, email, phone, dutyAddress, password } = req.body;
+    const { name, email, phone, dutyAddress, password, permissions } = req.body;
     const emp = await Employee.findOne({email});
     if(emp){
       return res.status(400).json({ success: false, message: error.message });
@@ -608,6 +662,7 @@ exports.createEmployee = async (req, res) => {
         dutyAddress,
         company: req.user._id,
         companyName: req.user.companyName,
+        permissions: permissions || {}
       });
   
       res.status(201).json({

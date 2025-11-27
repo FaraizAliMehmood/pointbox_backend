@@ -3,9 +3,7 @@ const bcrypt = require('bcryptjs');
 
 const employeeSchema = new mongoose.Schema({
   name: {
-    type: String,
-    required: [true, 'Employee name is required'],
-    trim: true,
+    type: String
   },
   email: {
     type: String,
@@ -14,16 +12,10 @@ const employeeSchema = new mongoose.Schema({
     trim: true,
   },
   phone: {
-    type: String,
-    required: [true, 'Phone number is required'],
-    unique: true,
-    trim: true,
+    type: String
   },
   username: {
-    type: String,
-    unique: true,
-    sparse: true, // Allows multiple null values
-    trim: true,
+    type: String
   },
   password: {
     type: String,
@@ -52,12 +44,9 @@ const employeeSchema = new mongoose.Schema({
     ref: 'SuperAdmin',
   },
   permissions: {
-    manageCompanies: { type: Boolean, default: false },
-    manageEmployees: { type: Boolean, default: false },
     manageCustomers: { type: Boolean, default: false },
     manageTransactions: { type: Boolean, default: false },
     manageQueries: { type: Boolean, default: false },
-    manageBanners: { type: Boolean, default: false },
     manageNotifications: { type: Boolean, default: false },
   },
   fcmTokens: [{

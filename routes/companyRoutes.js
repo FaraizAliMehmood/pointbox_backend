@@ -3,14 +3,16 @@ const router = express.Router();
 const {
   signup,
   login,
- updateAdminPassword,
+  updateAdminPassword,
   updateCompany,
+  changePassword,
   createCustomer,
   getCustomers,
   updateCustomer,
   deleteCustomer,
   uploadProduct,
   getProducts,
+  getProductsFromCompany,
   updateProduct,
   deleteProduct,
   getTransactions,
@@ -36,6 +38,7 @@ router.post('/login', login);
 // Protected routes
 router.get('/profile', protectCompany, getCompanyProfile);
 router.put('/profile', protectCompany, uploadLogo, updateCompany);
+router.put('/change-password', protectCompany, changePassword);
 router.post('/customers', protectCompany, createCustomer);
 router.get('/customers', protectCompany, getCustomers);
 router.put('/customers/:id', protectCompany, updateCustomer);
@@ -43,7 +46,7 @@ router.delete('/customers/:id', protectCompany, deleteCustomer);
 router.get('/customers/export', protectCompany, exportCustomers);
 
 router.post('/products', protectCompany, uploadSingle, uploadProduct);
-router.get('/products', protectCompany, getProducts);
+router.get('/products', protectCompany,getProductsFromCompany);
 router.post('/web/products', getProducts);
 router.put('/products/:id', protectCompany, uploadSingle, updateProduct);
 router.delete('/products/:id', protectCompany, deleteProduct);

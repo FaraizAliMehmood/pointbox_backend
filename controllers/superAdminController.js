@@ -328,11 +328,11 @@ exports.createCompany = async (req, res) => {
         });
       }
     }
-
+    const hashedPassword = await bcrypt.hash(password,10)
     const company = await Company.create({
       companyName,
       email,
-      password,
+      password: hashedPassword,
       phone,
       licenseNumber,
       vatNumber,

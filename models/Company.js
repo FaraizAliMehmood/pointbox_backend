@@ -50,6 +50,10 @@ publicId:{
     type: String,
     trim: true,
   },
+  role:{
+    type: String,
+    default: "company"
+  },
   // createdBy: {
   //   type: mongoose.Schema.Types.ObjectId,
   //   ref: 'SuperAdmin'
@@ -61,19 +65,6 @@ publicId:{
 }, {
   timestamps: true,
 });
-
-// companySchema.pre('save', async function (next) {
-//   if (!this.isModified('password')) {
-//     return next();
-//   }
-//   this.password = await bcrypt.hash(this.password, 10);
-//   next();
-// });
-
-// companySchema.methods.comparePassword = async function (enteredPassword) {
-//   return await bcrypt.compare(enteredPassword, this.password);
-// };
-
 // Prevent model re-compilation during hot reloading
 const Company = mongoose.models.Company || mongoose.model('Company', companySchema);
 

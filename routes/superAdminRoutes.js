@@ -55,6 +55,8 @@ const { uploadSingle, uploadLogo } = require('../middleware/upload');
 router.post('/signup', signup);
 router.post('/login', login);
 
+router.get('/web/newsletters', getNewsletters);
+
 // Protected routes
 router.post('/admins', protectSuperAdmin, createAdmin);
 router.get('/admins', protectSuperAdmin, getAdmins);
