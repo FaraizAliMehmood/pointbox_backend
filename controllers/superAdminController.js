@@ -843,6 +843,7 @@ exports.uploadBanner = async (req, res) => {
       badge: req.body.badge,
       imageUrl: imageUrl,
       public_id: publicId,
+      productUrl: req.body.productUrl,
       startDate: req.body.startDate,
       endDate: req.body.endDate,
       type: req.body.type,

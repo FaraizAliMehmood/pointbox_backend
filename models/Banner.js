@@ -35,6 +35,9 @@ endDate:{
     type: Boolean,
     default: true,
   },
+  productUrl:{
+    type: String
+  },
   createdBy: {
     type: mongoose.Schema.Types.ObjectId,
     refPath: 'createdByModel',
@@ -42,13 +45,13 @@ endDate:{
   },
   createdByModel: {
     type: String,
-    enum: ['SuperAdmin', 'Admin'],
+    enum: ['SuperAdmin', 'Admin', 'Company'],
     default: 'SuperAdmin',
   },
-  // order: {
-  //   type: Number,
-  //   default: 0,
-  // },
+  points: {
+    type: Number,
+    default: 0,
+  },
 }, {
   timestamps: true,
 });

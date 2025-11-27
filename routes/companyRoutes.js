@@ -26,6 +26,10 @@ const {
   getCompanyProfile,
   getQueries,
   respondToQuery,
+  uploadBanner,
+  getBanners,
+  updateBanner,
+  deleteBanner
 } = require('../controllers/companyController');
 const { protectCompany } = require('../middleware/auth');
 const { uploadSingle, uploadLogo } = require('../middleware/upload');
@@ -63,6 +67,11 @@ router.post('/notifications', protectCompany, createNotification);
 
 router.get('/queries', protectCompany, getQueries);
 router.post('/queries/:id/respond', protectCompany, respondToQuery);
+// Banner routes
+router.get('/banners',protectCompany, getBanners);
+router.post('/banners',protectCompany, uploadSingle, uploadBanner);
+router.put('/banners/:id',protectCompany, uploadSingle, updateBanner);
+router.delete('/banners/:id',protectCompany, deleteBanner);
 
 
 module.exports = router;

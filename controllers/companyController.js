@@ -6,6 +6,7 @@ const Transaction = require('../models/Transaction');
 const Employee = require('../models/Employee');
 const Notification = require('../models/Notification');
 const Query = require('../models/Query');
+const Banner = require("../models/Banner");
 const { generateToken } = require('../middleware/auth');
 const { uploadToCloudinary, deleteFromCloudinary } = require('../utils/cloudinaryUpload');
 const { exportToCSV, exportToXLSX, exportToPDF } = require('../utils/export');
@@ -452,6 +453,7 @@ exports.uploadProduct = async (req, res) => {
 // @access  Private (Company)
 exports.getProductsFromCompany = async (req, res) => {
   try {
+
     const products = await Product.find({ company: req.user._id });
     res.json({ success: true, data: products });
   } catch (error) {
@@ -650,7 +652,7 @@ exports.createEmployee = async (req, res) => {
     const { name, email, phone, dutyAddress, password, permissions } = req.body;
     const emp = await Employee.findOne({email});
     if(emp){
-      return res.status(400).json({ success: false, message: error.message });
+      return res.status(400).json({ success: false, message: "Email already in use." });
     }else{
       const hashedPassword = await bcrypt.hash(password,10)
       const employee = await Employee.create({
@@ -674,6 +676,186 @@ exports.createEmployee = async (req, res) => {
     res.status(400).json({ success: false, message: error.message });
   }
 };
+
+
+
+exports.uploadBanner = async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ success: false, message: 'Please upload an image' });
+    }
+
+    let imageUrl = '';
+    let publicId = '';
+
+    // Upload image to Cloudinary if provided
+    try {
+      const result = await uploadToCloudinary(req.file.buffer, 'banners');
+      imageUrl = result.secure_url;
+      publicId = result.public_id;
+    } catch (uploadError) {
+      return res.status(400).json({ 
+        success: false, 
+        message: `Failed to upload image: ${uploadError.message}` 
+      });
+    }
+
+    const banner = await Banner.create({
+      title: req.body.title,
+      description: req.body.description,
+      badge: req.body.badge,
+      imageUrl: imageUrl,
+      public_id: publicId,
+      productUrl: req.body.productUrl,
+      startDate: req.body.startDate,
+      endDate: req.body.endDate,
+      points: req.body.points,
+      type: req.body.type || 'regular',
+      isActive: req.body.isActive !== undefined ? req.body.isActive === 'true' : true,
+      createdBy: req.user._id,
+      createdByModel: 'Company',
+    });
+
+    res.status(201).json({
+      success: true,
+      data: banner,
+    });
+  } catch (error) {
+    res.status(400).json({ success: false, message: error.message });
+  }
+};
+
+// @desc    Get all Banners
+// @route   GET /api/admin/banners
+// @access  Private (Admin with manageBanners permission)
+exports.getBanners = async (req, res) => {
+  try {
+    const banners = await Banner.find({createdBy: req.user._id}).sort({ createdAt: -1 });
+    res.json({ success: true, data: banners });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// @desc    Create Banner
+// @route   POST /api/admin/banners
+// @access  Private (Admin with manageBanners permission)
+exports.uploadBanner = async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ success: false, message: 'Please upload an image' });
+    }
+
+    let imageUrl = '';
+    let publicId = '';
+
+    // Upload image to Cloudinary if provided
+    try {
+      const result = await uploadToCloudinary(req.file.buffer, 'banners');
+      imageUrl = result.secure_url;
+      publicId = result.public_id;
+    } catch (uploadError) {
+      return res.status(400).json({ 
+        success: false, 
+        message: `Failed to upload image: ${uploadError.message}` 
+      });
+    }
+    const banner = await Banner.create({
+      title: req.body.title,
+      description: req.body.description,
+      badge: req.body.badge,
+      imageUrl: imageUrl,
+      public_id: publicId,
+      productUrl: req.body.productUrl,
+      startDate: req.body.startDate,
+      endDate: req.body.endDate,
+      points: req.body.points,
+      type: req.body.type || 'regular',
+      isActive: req.body.isActive !== undefined ? req.body.isActive === 'true' : true,
+      createdBy: req.user._id,
+      createdByModel: 'Company',
+    });
+    res.status(201).json({
+      success: true,
+      data: banner,
+    });
+  } catch (error) {
+    res.status(400).json({ success: false, message: error.message });
+  }
+};
+
+// @desc    Update Banner
+// @route   PUT /api/admin/banners/:id
+// @access  Private (Admin with manageBanners permission)
+exports.updateBanner = async (req, res) => {
+  try {
+    const banner = await Banner.findById(req.params.id);
+
+    if (!banner) {
+      return res.status(404).json({ success: false, message: 'Banner not found' });
+    }
+
+    // Upload new image if provided
+    if (req.file) {
+      try {
+        // Delete old image from Cloudinary if exists
+        if (banner.public_id) {
+          await deleteFromCloudinary(banner.public_id);
+        }
+        
+        // Upload new image
+        const result = await uploadToCloudinary(req.file.buffer, 'banners');
+        banner.imageUrl = result.secure_url;
+        banner.public_id = result.public_id;
+      } catch (uploadError) {
+        return res.status(400).json({ 
+          success: false, 
+          message: `Failed to upload image: ${uploadError.message}` 
+        });
+      }
+    }
+
+    // Update fields - use !== undefined to allow empty strings to clear fields
+    if (req.body.title !== undefined) banner.title = req.body.title;
+    if (req.body.description !== undefined) banner.description = req.body.description;
+    if (req.body.badge !== undefined) banner.badge = req.body.badge;
+    if (req.body.points !== undefined) {
+      // Convert points to number if it's a string
+      banner.points = typeof req.body.points === 'string' ? parseInt(req.body.points) || 0 : req.body.points;
+    }
+    if (req.body.productUrl !== undefined) banner.productUrl = req.body.productUrl;
+    if (req.body.startDate !== undefined) banner.startDate = req.body.startDate;
+    if (req.body.endDate !== undefined) banner.endDate = req.body.endDate;
+    if (req.body.type !== undefined) banner.type = req.body.type;
+
+    if (req.body.isActive !== undefined) banner.isActive = req.body.isActive === 'true' || req.body.isActive === true;
+
+    await banner.save();
+    res.json({ success: true, data: banner });
+  } catch (error) {
+    res.status(400).json({ success: false, message: error.message });
+  }
+};
+
+// @desc    Delete Banner
+// @route   DELETE /api/admin/banners/:id
+// @access  Private (Admin with manageBanners permission)
+exports.deleteBanner = async (req, res) => {
+  try {
+    const banner = await Banner.findById(req.params.id);
+
+    if (!banner) {
+      return res.status(404).json({ success: false, message: 'Banner not found' });
+    }
+
+    await banner.deleteOne();
+
+    res.json({ success: true, message: 'Banner deleted successfully' });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
 
 // @desc    Get all Employees
 // @route   GET /api/company/employees

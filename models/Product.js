@@ -3,7 +3,6 @@ const mongoose = require('mongoose');
 const productSchema = new mongoose.Schema({
   name: {
     type: String,
-    required: [true, 'Product name is required'],
     trim: true,
   },
   description: {
@@ -21,8 +20,6 @@ const productSchema = new mongoose.Schema({
   },
   couponCode: {
     type: String,
-    unique: true,
-    sparse: true,
     trim: true,
   },
   company: {
