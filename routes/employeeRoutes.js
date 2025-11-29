@@ -16,6 +16,7 @@ const {
   getProductsFromCompany,
   updateProduct,
   deleteProduct,
+  Customers
 } = require('../controllers/employeeController');
 const { protectEmployee } = require('../middleware/auth');
 const { uploadInvoice, uploadSingle } = require('../middleware/upload');
@@ -25,6 +26,7 @@ router.post('/login', login);
 
 // Protected routes
 router.post('/verify-customer', protectEmployee, verifyCustomer);
+router.get('/customers', protectEmployee,Customers);
 router.post('/add-points', protectEmployee, uploadInvoice, addRedeemPoints);
 router.get('/redeem-history', protectEmployee, getRedeemHistory);
 

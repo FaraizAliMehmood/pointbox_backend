@@ -627,3 +627,58 @@ exports.deleteProduct = async (req, res) => {
 };
 
 
+exports.Customers = async (req, res) => {
+  try {
+    const companyId = req.user.company._id || req.user.company;
+    
+    // Find all customers that are linked to the employee's company
+    const customers = await Customer.find({
+      'linkedCompanies.company': companyId
+    }).populate('linkedCompanies.company', 'companyName _id');
+
+    // Map customers to include necessary fields
+    const customersData = customers.map(customer => {
+      // Find the specific linked company data for this employee's company
+      const linkedCompany = customer.linkedCompanies.find(
+        (link) => link.company._id.toString() === companyId.toString() || 
+                  link.company.toString() === companyId.toString()
+      );
+
+      // Map all linked companies
+      const linkedCompaniesData = customer.linkedCompanies.map(link => {
+        const linkCompanyId = link.company?._id?.toString() || link.company?.toString() || '';
+        const linkCompanyName = link.companyName || link.company?.companyName || '';
+        return {
+          id: linkCompanyId,
+          name: linkCompanyName,
+        };
+      });
+
+      return {
+        _id: customer._id,
+        id: customer._id,
+        username: customer.username,
+        name: customer.username,
+        email: customer.email,
+        phone: customer.phone,
+        phoneNumber: customer.phone,
+        address: customer.address || '',
+        country: customer.country || '',
+        points: customer.totalPoints || 0,
+        totalPoints: customer.totalPoints || 0,
+        isLinked: !!linkedCompany,
+        linkedCompanies: linkedCompaniesData,
+        createdAt: customer.createdAt,
+      };
+    });
+    
+    res.json({
+      success: true,
+      data: customersData,
+    });
+  } catch (error) {
+    console.error('Error in Customers controller:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
