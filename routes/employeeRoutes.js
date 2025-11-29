@@ -8,9 +8,17 @@ const {
   registerFCMToken,
   removeFCMToken,
   updatePassword,
+  getBanners,
+  uploadBanner,
+  updateBanner,
+  deleteBanner,
+  uploadProduct,
+  getProductsFromCompany,
+  updateProduct,
+  deleteProduct,
 } = require('../controllers/employeeController');
 const { protectEmployee } = require('../middleware/auth');
-const { uploadInvoice } = require('../middleware/upload');
+const { uploadInvoice, uploadSingle } = require('../middleware/upload');
 
 // Public routes
 router.post('/login', login);
@@ -26,6 +34,18 @@ router.delete('/fcm-token', protectEmployee, removeFCMToken);
 
 // Password update route
 router.put('/update-password', protectEmployee, updatePassword);
+
+// Banner routes
+router.get('/banners/:id', getBanners);
+router.post('/banners', protectEmployee, uploadSingle, uploadBanner);
+router.put('/banners/:id', protectEmployee, uploadSingle, updateBanner);
+router.delete('/banners/:id', protectEmployee, deleteBanner);
+
+// Products routes
+router.post('/products', protectEmployee, uploadSingle, uploadProduct);
+router.get('/products/:id',getProductsFromCompany);
+router.put('/products/:id', protectEmployee, uploadSingle, updateProduct);
+router.delete('/products/:id',protectEmployee, deleteProduct);
 
 module.exports = router;
 

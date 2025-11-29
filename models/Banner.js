@@ -45,7 +45,7 @@ endDate:{
   },
   createdByModel: {
     type: String,
-    enum: ['SuperAdmin', 'Admin', 'Company'],
+    enum: ['SuperAdmin', 'Admin', 'Company', 'Employee'],
     default: 'SuperAdmin',
   },
   points: {

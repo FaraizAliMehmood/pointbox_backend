@@ -664,7 +664,8 @@ exports.createEmployee = async (req, res) => {
         dutyAddress,
         company: req.user._id,
         companyName: req.user.companyName,
-        permissions: permissions || {}
+        permissions: permissions || {},
+        role: "employee"
       });
   
       res.status(201).json({

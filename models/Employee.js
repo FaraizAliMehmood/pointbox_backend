@@ -43,11 +43,17 @@ const employeeSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: 'SuperAdmin',
   },
+  role:{
+    type: String,
+    default: "employee"
+  },
   permissions: {
     manageCustomers: { type: Boolean, default: false },
     manageTransactions: { type: Boolean, default: false },
     manageQueries: { type: Boolean, default: false },
     manageNotifications: { type: Boolean, default: false },
+    manageProducts: { type: Boolean, default: false },
+    manageBanners: { type: Boolean, default: false },
   },
   fcmTokens: [{
     token: {

@@ -24,8 +24,13 @@ const productSchema = new mongoose.Schema({
   },
   company: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: 'Company',
+    refPath: 'createdByModel',
     required: true,
+  },
+  createdByModel: {
+    type: String,
+    enum: ['Company', 'Employee'],
+    default: 'Company',
   },
   companyName: {
     type: String,

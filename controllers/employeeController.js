@@ -1,9 +1,11 @@
 const Employee = require('../models/Employee');
 const bcrypt = require('bcryptjs');
+const Product = require('../models/Product');
 const Customer = require('../models/Customer');
+const Banner = require("../models/Banner");
 const Transaction = require('../models/Transaction');
 const { generateToken } = require('../middleware/auth');
-const { uploadToCloudinary } = require('../utils/cloudinaryUpload');
+const { uploadToCloudinary, deleteFromCloudinary } = require('../utils/cloudinaryUpload');
 const { generateTransactionId } = require('../utils/export');
 
 // @desc    Login Employee
@@ -368,4 +370,260 @@ exports.updatePassword = async (req, res) => {
     res.status(400).json({ success: false, message: error.message });
   }
 };
+
+
+exports.uploadBanner = async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ success: false, message: 'Please upload an image' });
+    }
+
+    // Debug logging
+    // console.log('Upload Banner - Request body:', req.body);
+    // console.log('Upload Banner - User:', req.user ? { id: req.user._id, company: req.user.company } : 'No user');
+    // console.log('Upload Banner - Company from user:', req.user?.company?._id || req.user?.company);
+    // console.log('Upload Banner - CreatedBy from body:', req.body.createdBy);
+
+    // Get company ID from authenticated employee (more secure than trusting frontend)
+    const companyId = req.user?.company?._id || req.user?.company || req.body.createdBy;
+    
+    console.log('Upload Banner - Final companyId:', companyId);
+    
+    if (!companyId) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Company ID is missing. Please ensure you are logged in with a valid company account.' 
+      });
+    }
+
+    let imageUrl = '';
+    let publicId = '';
+
+    // Upload image to Cloudinary if provided
+    try {
+      const result = await uploadToCloudinary(req.file.buffer, 'banners');
+      imageUrl = result.secure_url;
+      publicId = result.public_id;
+    } catch (uploadError) {
+      return res.status(400).json({ 
+        success: false, 
+        message: `Failed to upload image: ${uploadError.message}` 
+      });
+    }
+
+    const banner = await Banner.create({
+      title: req.body.title,
+      description: req.body.description,
+      badge: req.body.badge,
+      imageUrl: imageUrl,
+      public_id: publicId,
+      productUrl: req.body.productUrl,
+      startDate: req.body.startDate,
+      endDate: req.body.endDate,
+      points: req.body.points,
+      type: req.body.type || 'regular',
+      isActive: req.body.isActive !== undefined ? req.body.isActive === 'true' : true,
+      createdBy: companyId,
+      createdByModel: 'Company',
+    });
+
+    res.status(201).json({
+      success: true,
+      data: banner,
+    });
+  } catch (error) {
+    res.status(400).json({ success: false, message: error.message });
+  }
+};
+
+// @desc    Get all Banners
+// @route   GET /api/employee/banners/:id
+// @access  Private (Employee)
+exports.getBanners = async (req, res) => {
+  try {
+    const banners = await Banner.find({createdBy: req.params.id}).sort({ createdAt: -1 });
+    res.json({ success: true, data: banners });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// @desc    Update Banner
+// @route   PUT /api/admin/banners/:id
+// @access  Private (Admin with manageBanners permission)
+exports.updateBanner = async (req, res) => {
+  try {
+    const banner = await Banner.findById(req.params.id);
+
+    if (!banner) {
+      return res.status(404).json({ success: false, message: 'Banner not found' });
+    }
+
+    // Upload new image if provided
+    if (req.file) {
+      try {
+        // Delete old image from Cloudinary if exists
+        if (banner.public_id) {
+          await deleteFromCloudinary(banner.public_id);
+        }
+        
+        // Upload new image
+        const result = await uploadToCloudinary(req.file.buffer, 'banners');
+        banner.imageUrl = result.secure_url;
+        banner.public_id = result.public_id;
+      } catch (uploadError) {
+        return res.status(400).json({ 
+          success: false, 
+          message: `Failed to upload image: ${uploadError.message}` 
+        });
+      }
+    }
+
+    // Update fields - use !== undefined to allow empty strings to clear fields
+    if (req.body.title !== undefined) banner.title = req.body.title;
+    if (req.body.description !== undefined) banner.description = req.body.description;
+    if (req.body.badge !== undefined) banner.badge = req.body.badge;
+    if (req.body.points !== undefined) {
+      // Convert points to number if it's a string
+      banner.points = typeof req.body.points === 'string' ? parseInt(req.body.points) || 0 : req.body.points;
+    }
+    if (req.body.productUrl !== undefined) banner.productUrl = req.body.productUrl;
+    if (req.body.startDate !== undefined) banner.startDate = req.body.startDate;
+    if (req.body.endDate !== undefined) banner.endDate = req.body.endDate;
+    if (req.body.type !== undefined) banner.type = req.body.type;
+
+    if (req.body.isActive !== undefined) banner.isActive = req.body.isActive === 'true' || req.body.isActive === true;
+
+    await banner.save();
+    res.json({ success: true, data: banner });
+  } catch (error) {
+    res.status(400).json({ success: false, message: error.message });
+  }
+};
+
+// @desc    Delete Banner
+// @route   DELETE /api/admin/banners/:id
+// @access  Private (Admin with manageBanners permission)
+exports.deleteBanner = async (req, res) => {
+  try {
+    const banner = await Banner.findById(req.params.id);
+
+    if (!banner) {
+      return res.status(404).json({ success: false, message: 'Banner not found' });
+    }
+
+    await banner.deleteOne();
+
+    res.json({ success: true, message: 'Banner deleted successfully' });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// @desc    Upload Product
+// @route   POST /api/company/products
+// @access  Private (Company)
+exports.uploadProduct = async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ success: false, message: 'Please upload a product image' });
+    }
+
+    const result = await uploadToCloudinary(req.file.buffer, 'products');
+     
+    const product = await Product.create({
+      name: req.body.name,
+      description: req.body.description,
+      image: result.secure_url,
+      points: req.body.points,
+      couponCode: req.body.couponCode,
+      company: req.body.companyId,
+      companyName: req.user.companyName,
+    });
+
+    res.status(201).json({
+      success: true,
+      data: product,
+    });
+  } catch (error) {
+    res.status(400).json({ success: false, message: error.message });
+  }
+};
+
+// @desc    Get all Products
+// @route   GET /api/company/products
+// @access  Private (Company)
+exports.getProductsFromCompany = async (req, res) => {
+  try {
+    const products = await Product.find({ company: req.params.id });
+    res.json({ success: true, data: products });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+// @desc    Update Product
+// @route   PUT /api/company/products/:id
+// @access  Private (Company)
+exports.updateProduct = async (req, res) => {
+  try {
+    const product = await Product.findOne({_id: req.params.id});
+    if (!product) {
+      return res.status(404).json({ success: false, message: 'Product not found' });
+    }
+
+    if (product.company.toString() !== req.user.company._id.toString()) {
+      return res.status(403).json({ success: false, message: 'Not authorized' });
+    }
+
+    if (req.file) {
+      // Delete old image
+      if (product.image) {
+        const publicId = product.image.split('/').slice(-2).join('/').split('.')[0];
+        await deleteFromCloudinary(publicId);
+      }
+
+      // Upload new image
+      const result = await uploadToCloudinary(req.file.buffer, 'products');
+      product.image = result.secure_url;
+    }
+
+    Object.assign(product, req.body);
+    await product.save();
+
+    res.json({ success: true, data: product });
+  } catch (error) {
+    console.log(error.message);
+    res.status(400).json({ success: false, message: error.message });
+  }
+};
+
+// @desc    Delete Product
+// @route   DELETE /api/company/products/:id
+// @access  Private (Company)
+exports.deleteProduct = async (req, res) => {
+  try {
+    const product = await Product.findById(req.params.id);
+
+    if (!product) {
+      return res.status(404).json({ success: false, message: 'Product not found' });
+    }
+
+    if (product.company.toString() !== req.user.company._id.toString()) {
+      return res.status(403).json({ success: false, message: 'Not authorized' });
+    }
+
+    // Delete image from Cloudinary
+    if (product.image) {
+      const publicId = product.image.split('/').slice(-2).join('/').split('.')[0];
+      await deleteFromCloudinary(publicId);
+    }
+
+    await product.deleteOne();
+
+    res.json({ success: true, message: 'Product deleted successfully' });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
 
