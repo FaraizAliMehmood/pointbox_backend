@@ -7,6 +7,7 @@ const Banner = require('../models/Banner');
 const Query = require('../models/Query');
 const Contact = require('../models/Contact');
 const Company = require('../models/Company');
+const NewsLetters = require('../models/NewsLetters');
 const { generateToken } = require('../middleware/auth');
 const { sendEmail } = require('../config/email');
 const FAQ = require('../models/FAQ');
@@ -756,6 +757,24 @@ exports.getFAQs = async (req, res) => {
   try {
     const faqs = await FAQ.find().sort({ order: 1, createdAt: -1 });
     res.json({ success: true, data: faqs });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+exports.getNewsletters = async (req, res) => {
+  try {
+    const newsletters = await NewsLetters.find()
+      .populate('createdBy', 'username email')
+      .sort({ createdAt: -1 });
+    res.json({ success: true, data: newsletters });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+exports.getBrandsBanners = async (req, res) => {
+  try {
+    const banners = await Banner.find().sort({ createdAt: -1 });
+    res.json({ success: true, data: banners });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }

@@ -23,7 +23,9 @@ const {
   createNewsletterEmail,
   getCompanies,
   getCompanyProducts,
-  getFAQs
+  getFAQs,
+  getNewsletters,
+  getBrandsBanners
 } = require('../controllers/customerController');
 const { protectCustomer } = require('../middleware/auth');
 
@@ -58,6 +60,8 @@ router.post('/web/newsletter-emails',createNewsletterEmail);
 router.get('/web/companies', getCompanies);
 router.post('/web/products', getCompanyProducts);
 router.get('/web/faqs', getFAQs);
+router.get('/web/newsletters', getNewsletters);
+router.get('/web/banners', getBrandsBanners);
 
 module.exports = router;
 
