@@ -92,7 +92,7 @@ exports.createCompany = async (req, res) => {
       return res.status(403).json({ success: false, message: 'You do not have permission to manage companies' });
     }
 
-    const { companyName, email, password, phone, licenseNumber, vatNumber, address, country } = req.body;
+    const { companyName, email, password, phone, licenseNumber, vatNumber, address, country, employeeCount } = req.body;
 
     let companyLogo = '';
     let publicId = '';
@@ -112,7 +112,7 @@ exports.createCompany = async (req, res) => {
     }
 
     const hashedPassword = await bcrypt.hash(password, 10);
-    const company = await Company.create({
+    const companyData = {
       companyName,
       email,
       password: hashedPassword,
@@ -122,8 +122,18 @@ exports.createCompany = async (req, res) => {
       address,
       country,
       companyLogo,
-      publicId,
-    });
+      publicId
+    };
+    
+    // Handle employeeCount - convert string to number if provided
+    if (employeeCount !== undefined && employeeCount !== null && employeeCount !== '') {
+      const parsedCount = parseInt(employeeCount, 10);
+      if (!isNaN(parsedCount) && parsedCount >= 0) {
+        companyData.employeeCount = parsedCount;
+      }
+    }
+    
+    const company = await Company.create(companyData);
 
     res.status(201).json({
       success: true,
@@ -170,7 +180,7 @@ exports.updateCompany = async (req, res) => {
     }
 
     // Update other fields
-    const { companyName, email, phone, licenseNumber, vatNumber, address, country, password } = req.body;
+    const { companyName, email, phone, licenseNumber, vatNumber, address, country, password, employeeCount } = req.body;
     if (companyName) company.companyName = companyName;
     if (email) company.email = email;
     if (phone) company.phone = phone;
@@ -178,6 +188,8 @@ exports.updateCompany = async (req, res) => {
     if (vatNumber) company.vatNumber = vatNumber;
     if (address) company.address = address;
     if (country) company.country = country;
+    if (employeeCount !== undefined) company.employeeCount = employeeCount;
+    
     if (password) {
       company.password = await bcrypt.hash(password, 10);
     }

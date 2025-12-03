@@ -647,37 +647,90 @@ exports.exportCustomers = async (req, res) => {
 // @desc    Create Employee
 // @route   POST /api/company/employees
 // @access  Private (Company)
+// exports.createEmployee = async (req, res) => {
+//   try {
+
+//     const { name, email, phone, dutyAddress, password, permissions } = req.body;
+//     const emp = await Employee.findOne({email});
+//     if(emp){
+//       return res.status(400).json({ success: false, message: "Email already in use." });
+//     }else{
+//       const hashedPassword = await bcrypt.hash(password,10)
+//       const employee = await Employee.create({
+//         name,
+//         email,
+//         phone,
+//         username: phone, // Set username to phone number as default
+//         password: hashedPassword,
+//         dutyAddress,
+//         company: req.user._id,
+//         companyName: req.user.companyName,
+//         permissions: permissions || {},
+//         role: "employee"
+//       });
+  
+//       res.status(201).json({
+//         success: true,
+//         data: employee,
+//       });
+//     }
+//   } catch (error) {
+//     res.status(400).json({ success: false, message: error.message });
+//   }
+// };
+
 exports.createEmployee = async (req, res) => {
   try {
     const { name, email, phone, dutyAddress, password, permissions } = req.body;
+    
+    // Check if email is already in use
     const emp = await Employee.findOne({email});
     if(emp){
       return res.status(400).json({ success: false, message: "Email already in use." });
-    }else{
-      const hashedPassword = await bcrypt.hash(password,10)
-      const employee = await Employee.create({
-        name,
-        email,
-        phone,
-        username: phone, // Set username to phone number as default
-        password: hashedPassword,
-        dutyAddress,
-        company: req.user._id,
-        companyName: req.user.companyName,
-        permissions: permissions || {},
-        role: "employee"
-      });
-  
-      res.status(201).json({
-        success: true,
-        data: employee,
-      });
     }
+
+    // Get the company to check employeeCount limit
+    const company = await Company.findById(req.user._id);
+    if (!company) {
+      return res.status(404).json({ success: false, message: "Company not found." });
+    }
+
+    // Count actual current employees for this company
+    const actualEmployeeCount = await Employee.countDocuments({ company: req.user._id });
+    
+    // Only check limit if employeeCount is 2 or more
+    if (company.employeeCount !== null && company.employeeCount !== undefined && company.employeeCount >= 2) {
+      if (actualEmployeeCount >= company.employeeCount) {
+        return res.status(400).json({ 
+          success: false, 
+          message: `Employee limit reached. Maximum ${company.employeeCount} employees allowed.` 
+        });
+      }
+    }
+
+    // Create the employee
+    const hashedPassword = await bcrypt.hash(password,10)
+    const employee = await Employee.create({
+      name,
+      email,
+      phone,
+      username: phone, // Set username to phone number as default
+      password: hashedPassword,
+      dutyAddress,
+      company: req.user._id,
+      companyName: req.user.companyName,
+      permissions: permissions || {},
+      role: "employee"
+    });
+
+    res.status(201).json({
+      success: true,
+      data: employee,
+    });
   } catch (error) {
     res.status(400).json({ success: false, message: error.message });
   }
 };
-
 
 
 exports.uploadBanner = async (req, res) => {

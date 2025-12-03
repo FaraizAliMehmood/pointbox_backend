@@ -54,10 +54,9 @@ publicId:{
     type: String,
     default: "company"
   },
-  // createdBy: {
-  //   type: mongoose.Schema.Types.ObjectId,
-  //   ref: 'SuperAdmin'
-  // },
+  employeeCount: {
+    type: Number
+  },
   isActive: {
     type: Boolean,
     default: true,

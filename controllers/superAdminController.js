@@ -308,9 +308,7 @@ exports.updateEmployee = async (req, res) => {
 // @access  Private (Super Admin)
 exports.createCompany = async (req, res) => {
   try {
-    const { companyName, email, password, phone, licenseNumber, vatNumber, address, country } = req.body;
-    console.log(req.body.email)
-    console.log(req.body.password)
+    const { companyName, email, password, phone, licenseNumber, vatNumber, address, country, employeeCount } = req.body;
 
     let companyLogo = '';
     let publicId = '';
@@ -340,6 +338,7 @@ exports.createCompany = async (req, res) => {
       country,
       companyLogo,
       publicId,
+      employeeCount
     });
 
     res.status(201).json({
@@ -395,7 +394,7 @@ exports.updateCompany = async (req, res) => {
     }
 
     // Update other fields from req.body
-    const { companyName, email, password, phone, licenseNumber, vatNumber, address, country } = req.body;
+    const { companyName, email, password, phone, licenseNumber, vatNumber, address, country, employeeCount } = req.body;
     
     if (companyName) company.companyName = companyName;
     if (email) company.email = email;
@@ -405,6 +404,7 @@ exports.updateCompany = async (req, res) => {
     if (vatNumber !== undefined) company.vatNumber = vatNumber;
     if (address !== undefined) company.address = address;
     if (country !== undefined) company.country = country;
+    if (employeeCount !== undefined) company.employeeCount = employeeCount;
 
     await company.save();
 
