@@ -2,13 +2,17 @@ const Customer = require('../models/Customer');
 const bcrypt = require('bcryptjs');
 const Transaction = require('../models/Transaction');
 const Product = require('../models/Product');
+const Settings = require('../models/Settings');
 const Banner = require('../models/Banner');
 const Query = require('../models/Query');
 const Contact = require('../models/Contact');
 const Company = require('../models/Company');
 const { generateToken } = require('../middleware/auth');
 const { sendEmail } = require('../config/email');
+const FAQ = require('../models/FAQ');
 const Notification = require('../models/Notification');
+const NewsLetterEmails = require('../models/NewsLetterEmails');
+
 
 // @desc    Register Customer
 // @route   POST /api/customer/signup
@@ -347,7 +351,7 @@ exports.submitContact = async (req, res) => {
 exports.getBanners = async (req, res) => {
   try {
     const banners = await Banner.find({ isActive: true })
-      .sort({ order: 1, createdAt: -1 });
+      .sort({ createdAt: -1 });
 
     res.json({ success: true, data: banners });
   } catch (error) {
@@ -663,6 +667,95 @@ exports.getNotifications = async (req, res) => {
         pages: Math.ceil(total / limit),
       },
     });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+exports.getSettings = async (req, res) => {
+  try {
+    const settings = await Settings.findOne();
+
+    if (!settings) {
+      return res.status(404).json({ 
+        success: false, 
+        message: 'Settings not found' 
+      });
+    }
+
+    res.json({ 
+      success: true, 
+      data: settings 
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+exports.createNewsletterEmail = async (req, res) => {
+  try {
+    const { email, source } = req.body;
+
+    if (!email) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Email is required' 
+      });
+    }
+
+    // Check if email already exists
+    const existingEmail = await NewsLetterEmails.findOne({ email: email.toLowerCase().trim() });
+    if (existingEmail) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'This email is already subscribed' 
+      });
+    }
+
+    const newsletterEmail = await NewsLetterEmails.create({
+      email: email.toLowerCase().trim(),
+      source: source || 'manual',
+      isActive: true,
+    });
+
+    res.status(201).json({
+      success: true,
+      data: newsletterEmail,
+    });
+  } catch (error) {
+    // Handle duplicate key error (unique constraint)
+    if (error.code === 11000) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'This email is already subscribed' 
+      });
+    }
+    res.status(400).json({ success: false, message: error.message });
+  }
+};
+
+exports.getCompanies = async (req, res) => {
+  try {
+    const companies = await Company.find();
+    res.json({ success: true, data: companies });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+exports.getCompanyProducts = async (req, res) => {
+  try {
+    console.log("product is calling from the company panel")
+    const products = await Product.find({ company: req.body.id }).sort({ createdAt: -1 });
+    res.json({ success: true, data: products });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+exports.getFAQs = async (req, res) => {
+  try {
+    const faqs = await FAQ.find().sort({ order: 1, createdAt: -1 });
+    res.json({ success: true, data: faqs });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }

@@ -1246,8 +1246,7 @@ exports.createNewsletterEmail = async (req, res) => {
     const newsletterEmail = await NewsLetterEmails.create({
       email: email.toLowerCase().trim(),
       source: source || 'manual',
-      isActive: true,
-      createdBy: req.user._id
+      isActive: true
     });
 
     res.status(201).json({

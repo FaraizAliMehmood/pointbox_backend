@@ -1,5 +1,6 @@
 const Employee = require('../models/Employee');
 const bcrypt = require('bcryptjs');
+const Query = require('../models/Query');
 const Product = require('../models/Product');
 const Customer = require('../models/Customer');
 const Banner = require("../models/Banner");
@@ -129,7 +130,24 @@ exports.verifyCustomer = async (req, res) => {
 // @access  Private (Employee)
 exports.addRedeemPoints = async (req, res) => {
   try {
-    const { customerId, invoiceNumber, amount, date, time, notes, type = 'earn' } = req.body;
+    const { customerId, invoiceNumber, redeem_points, date, time, notes, type = 'earn' } = req.body;
+
+    // Ensure points is always a number (FormData sends everything as strings)
+    const points = Number(redeem_points) || 0;
+
+    if (!customerId || !invoiceNumber || !date || !time) {
+      return res.status(400).json({
+        success: false,
+        message: 'customerId, invoiceNumber, date and time are required',
+      });
+    }
+
+    if (points <= 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'Points must be greater than 0',
+      });
+    }
 
     const customer = await Customer.findById(customerId);
 
@@ -152,7 +170,7 @@ exports.addRedeemPoints = async (req, res) => {
     }
 
     // Calculate points (you can adjust the conversion rate)
-    const points = Math.floor(amount || 0);
+    //const points = Math.floor(amount || 0);
 
     // For redeem, ensure customer has enough points
     if (type === 'redeem' && customer.totalPoints < points) {
@@ -161,6 +179,11 @@ exports.addRedeemPoints = async (req, res) => {
         message: `Insufficient points. Customer has ${customer.totalPoints} points, but trying to redeem ${points} points` 
       });
     }
+
+    // New balance after this transaction (for information / debugging if needed)
+    const newTotalPoints = type === 'redeem'
+      ? customer.totalPoints - points
+      : customer.totalPoints + points;
 
     // Create transaction
     const transaction = await Transaction.create({
@@ -174,11 +197,10 @@ exports.addRedeemPoints = async (req, res) => {
       employee: req.user._id,
       employeeName: req.user.name,
       type,
-      points: type === 'redeem' ? -points : points,
-      amount: amount || 0,
+      // Store the actual transaction points, not the running total
+      redeem_points: points,
       date,
       time,
-      amount: amount || 0,
       invoiceNumber,
       invoiceImage: req.file ? (await uploadToCloudinary(req.file.buffer, 'invoices')).secure_url : undefined,
       notes,
@@ -191,6 +213,7 @@ exports.addRedeemPoints = async (req, res) => {
     } else {
       customer.totalPoints += points;
     }
+
     await customer.save();
 
     res.status(201).json({
@@ -198,6 +221,7 @@ exports.addRedeemPoints = async (req, res) => {
       data: transaction,
     });
   } catch (error) {
+    console.log(error.message);
     res.status(400).json({ success: false, message: error.message });
   }
 };
@@ -535,7 +559,7 @@ exports.uploadProduct = async (req, res) => {
       name: req.body.name,
       description: req.body.description,
       image: result.secure_url,
-      points: req.body.points,
+      redeem_points: req.body.redeem,
       couponCode: req.body.couponCode,
       company: req.body.companyId,
       companyName: req.user.companyName,
@@ -555,7 +579,7 @@ exports.uploadProduct = async (req, res) => {
 // @access  Private (Company)
 exports.getProductsFromCompany = async (req, res) => {
   try {
-    const products = await Product.find({ company: req.params.id });
+    const products = await Product.find({ company: req.params.id }).sort({ createdAt: -1 });
     res.json({ success: true, data: products });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
@@ -682,3 +706,15 @@ exports.Customers = async (req, res) => {
   }
 };
 
+exports.getQueries = async (req, res) => {
+  try {
+    const queries = await Query.find()
+      .populate('customer', 'username email phone')
+      .populate('responses.respondedBy', 'username email')
+      .sort({ createdAt: -1 });
+
+    res.json({ success: true, data: queries });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};

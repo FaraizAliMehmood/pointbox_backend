@@ -433,7 +433,7 @@ exports.uploadProduct = async (req, res) => {
       name: req.body.name,
       description: req.body.description,
       image: result.secure_url,
-      points: req.body.points,
+      redeem_points: req.body.redeem,
       couponCode: req.body.couponCode,
       company: req.user._id,
       companyName: req.user.companyName,
@@ -454,7 +454,7 @@ exports.uploadProduct = async (req, res) => {
 exports.getProductsFromCompany = async (req, res) => {
   try {
 
-    const products = await Product.find({ company: req.user._id });
+    const products = await Product.find({ company: req.user._id }).sort({ createdAt: -1 });
     res.json({ success: true, data: products });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
@@ -463,7 +463,7 @@ exports.getProductsFromCompany = async (req, res) => {
 exports.getProducts = async (req, res) => {
   try {
     console.log("product is calling from the company panel")
-    const products = await Product.find({ company: req.body.id });
+    const products = await Product.find({ company: req.body.id }).sort({ createdAt: -1 });
     res.json({ success: true, data: products });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });

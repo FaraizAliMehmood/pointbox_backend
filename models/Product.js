@@ -13,10 +13,10 @@ const productSchema = new mongoose.Schema({
     type: String,
     required: [true, 'Product image is required'],
   },
-  points: {
+  redeem_points:{
     type: Number,
-    required: [true, 'Product points are required'],
-    min: 0,
+    required: [true, 'Product redeem points are required'],
+    min: 0
   },
   couponCode: {
     type: String,

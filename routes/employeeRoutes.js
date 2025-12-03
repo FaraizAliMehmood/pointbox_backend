@@ -16,7 +16,8 @@ const {
   getProductsFromCompany,
   updateProduct,
   deleteProduct,
-  Customers
+  Customers,
+  getQueries
 } = require('../controllers/employeeController');
 const { protectEmployee } = require('../middleware/auth');
 const { uploadInvoice, uploadSingle } = require('../middleware/upload');
@@ -48,6 +49,7 @@ router.post('/products', protectEmployee, uploadSingle, uploadProduct);
 router.get('/products/:id',getProductsFromCompany);
 router.put('/products/:id', protectEmployee, uploadSingle, updateProduct);
 router.delete('/products/:id',protectEmployee, deleteProduct);
+router.get('/queries', protectEmployee, getQueries);
 
 module.exports = router;
 

@@ -19,6 +19,11 @@ const {
   registerFCMToken,
   removeFCMToken,
   getNotifications,
+  getSettings,
+  createNewsletterEmail,
+  getCompanies,
+  getCompanyProducts,
+  getFAQs
 } = require('../controllers/customerController');
 const { protectCustomer } = require('../middleware/auth');
 
@@ -48,6 +53,11 @@ router.delete('/fcm-token', protectCustomer, removeFCMToken);
 
 // Notification routes
 router.get('/notifications', protectCustomer, getNotifications);
+router.get("/web",getSettings);
+router.post('/web/newsletter-emails',createNewsletterEmail);
+router.get('/web/companies', getCompanies);
+router.post('/web/products', getCompanyProducts);
+router.get('/web/faqs', getFAQs);
 
 module.exports = router;
 

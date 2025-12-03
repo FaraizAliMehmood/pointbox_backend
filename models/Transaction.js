@@ -44,13 +44,9 @@ const transactionSchema = new mongoose.Schema({
     enum: ['earn', 'redeem'],
     required: true,
   },
-  points: {
+  redeem_points: {
     type: Number,
     required: true,
-    min: 0,
-  },
-  amount: {
-    type: Number,
     min: 0,
   },
   invoiceNumber: {
