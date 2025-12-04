@@ -310,6 +310,10 @@ exports.createCompany = async (req, res) => {
   try {
     const { companyName, email, password, phone, licenseNumber, vatNumber, address, country, employeeCount } = req.body;
 
+    const company = await Company.findOne({email})
+    if(company){
+      return  res.status(400).json({ success: false, message: "Company with this email already exist." });
+     }
     let companyLogo = '';
     let publicId = '';
 
@@ -327,7 +331,7 @@ exports.createCompany = async (req, res) => {
       }
     }
     const hashedPassword = await bcrypt.hash(password,10)
-    const company = await Company.create({
+    const compData = await Company.create({
       companyName,
       email,
       password: hashedPassword,
@@ -343,7 +347,7 @@ exports.createCompany = async (req, res) => {
 
     res.status(201).json({
       success: true,
-      data: company,
+      data: compData,
     });
   } catch (error) {
     res.status(400).json({ success: false, message: error.message });

@@ -8,6 +8,7 @@ const Transaction = require('../models/Transaction');
 const { generateToken } = require('../middleware/auth');
 const { uploadToCloudinary, deleteFromCloudinary } = require('../utils/cloudinaryUpload');
 const { generateTransactionId } = require('../utils/export');
+const { sendEmail } = require('../config/email');
 
 // @desc    Login Employee
 // @route   POST /api/employee/login
@@ -77,12 +78,13 @@ exports.verifyCustomer = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Customer not found' });
     }
 
-    // Check if customer is linked to employee's company
-    const isLinked = customer.linkedCompanies.some(
-      (link) => link.company.toString() === req.user.company._id.toString()
+    // Check if customer is linked to employee's company and get that specific link
+    const companyId = req.user.company._id.toString();
+    const companyLink = customer.linkedCompanies.find(
+      (link) => link.company.toString() === companyId
     );
 
-    if (!isLinked) {
+    if (!companyLink) {
       return res.status(403).json({
         success: false,
         message: 'Customer is not linked to your company',
@@ -96,15 +98,16 @@ exports.verifyCustomer = async (req, res) => {
       });
     }
     // Populate linked companies to get company details
-    await customer.populate('linkedCompanies.company', 'companyName _id');
-    
-    // Map linked companies to include id and name
+    await customer.populate('linkedCompanies.company', 'companyName _id redeem_points');
+    console.log(customer);
+    // Map linked companies to include id, name and redeem points
     const linkedCompaniesData = customer.linkedCompanies.map(link => {
       const companyId = link.company?._id?.toString() || link.company?.toString() || '';
       const companyName = link.companyName || link.company?.companyName || '';
       return {
         id: companyId,
         name: companyName,
+        redeem_points: link.redeem_points || 0,
       };
     });
     
@@ -116,6 +119,8 @@ exports.verifyCustomer = async (req, res) => {
         email: customer.email,
         phone: customer.phone,
         totalPoints: customer.totalPoints,
+        // Points specific to this company from the linkedCompanies array
+        companyPoints: companyLink?.redeem_points || 0,
         isLinked: true,
         linkedCompanies: linkedCompaniesData,
       },
@@ -155,12 +160,13 @@ exports.addRedeemPoints = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Customer not found' });
     }
 
-    // Verify customer is linked to company
-    const isLinked = customer.linkedCompanies.some(
-      (link) => link.company.toString() === req.user.company._id.toString()
+    // Verify customer is linked to company and get that specific link
+    const companyId = req.user.company._id.toString();
+    const companyLink = customer.linkedCompanies.find(
+      (link) => link.company.toString() === companyId
     );
 
-    if (!isLinked) {
+    if (!companyLink) {
       return res.status(403).json({ success: false, message: 'Customer is not linked to your company' });
     }
 
@@ -173,10 +179,10 @@ exports.addRedeemPoints = async (req, res) => {
     //const points = Math.floor(amount || 0);
 
     // For redeem, ensure customer has enough points
-    if (type === 'redeem' && customer.totalPoints < points) {
+    if (type === 'redeem' && companyLink.redeem_points < points) {
       return res.status(400).json({ 
         success: false, 
-        message: `Insufficient points. Customer has ${customer.totalPoints} points, but trying to redeem ${points} points` 
+        message: `Insufficient points. Customer has ${companyLink.redeem_points} points, but trying to redeem ${points} points` 
       });
     }
 
@@ -209,9 +215,12 @@ exports.addRedeemPoints = async (req, res) => {
     // Update customer points based on transaction type
     if (type === 'redeem') {
       customer.totalPoints -= points;
-      customer.redeemedPoints = (customer.redeemedPoints || 0) + points;
+      companyLink.redeem_points -= points; 
+      // Track redeemed points per company in linkedCompanies
+      
     } else {
       customer.totalPoints += points;
+      companyLink.redeem_points += points; 
     }
 
     await customer.save();
@@ -668,13 +677,14 @@ exports.Customers = async (req, res) => {
                   link.company.toString() === companyId.toString()
       );
 
-      // Map all linked companies
+      // Map all linked companies, including redeem_points
       const linkedCompaniesData = customer.linkedCompanies.map(link => {
         const linkCompanyId = link.company?._id?.toString() || link.company?.toString() || '';
         const linkCompanyName = link.companyName || link.company?.companyName || '';
         return {
           id: linkCompanyId,
           name: linkCompanyName,
+          redeem_points: link.redeem_points || 0,
         };
       });
 
@@ -716,5 +726,52 @@ exports.getQueries = async (req, res) => {
     res.json({ success: true, data: queries });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// @desc    Respond to Query
+// @route   POST /api/employee/queries/:id/respond
+// @access  Private (Employee)
+exports.respondToQuery = async (req, res) => {
+  try {
+    const { response } = req.body;
+    const query = await Query.findById(req.params.id);
+
+    if (!query) {
+      return res.status(404).json({ success: false, message: 'Query not found' });
+    }
+
+    // Check if query belongs to employee's company
+    const employeeCompanyId = req.user.company._id.toString();
+    const queryBrandId = query.brandId ? query.brandId.toString() : null;
+    
+    if (queryBrandId && queryBrandId !== employeeCompanyId) {
+      return res.status(403).json({ success: false, message: 'Not authorized to respond to this query' });
+    }
+
+    query.responses.push({
+      respondedBy: req.user._id,
+      response,
+    });
+
+    query.status = 'resolved';
+    await query.save();
+
+    // Send email response to customer
+    // try {
+    //   await sendEmail(
+    //     query.customerEmail,
+    //     `Re: ${query.subject}`,
+    //     response,
+    //     `<p>${response}</p>`
+    //   );
+    // } catch (emailError) {
+    //   console.error('Error sending email:', emailError);
+    //   // Continue even if email fails
+    // }
+
+    res.json({ success: true, data: query });
+  } catch (error) {
+    res.status(400).json({ success: false, message: error.message });
   }
 };

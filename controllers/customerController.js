@@ -92,15 +92,14 @@ exports.login = async (req, res) => {
 
     const token = generateToken(customer._id, 'customer');
 
+    // Convert to plain object and remove sensitive fields
+    const customerData = customer.toObject();
+    delete customerData.password;
+
     res.json({
       success: true,
       token,
-      user: {
-        id: customer._id,
-        username: customer.username,
-        email: customer.email,
-        totalPoints: customer.totalPoints,
-      },
+      user: customerData,
     });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
@@ -113,7 +112,7 @@ exports.login = async (req, res) => {
 exports.getProfile = async (req, res) => {
   try {
     const customer = await Customer.findById(req.user._id)
-      .populate('linkedCompanies.company', 'companyName email');
+      .populate('linkedCompanies.company', 'companyName email redeem_points');
 
     // Convert customer to plain object and add linkedBrands array for frontend compatibility
     const customerData = customer.toObject();
@@ -221,8 +220,9 @@ exports.redeemPoints = async (req, res) => {
 exports.getTransactions = async (req, res) => {
   try {
     const transactions = await Transaction.find({ customer: req.user._id })
-      .populate('company', 'companyName')
+      .populate('company', 'companyName companyLogo')
       .sort({ createdAt: -1 });
+    console.log(transactions);
 
     res.json({ success: true, data: transactions });
   } catch (error) {
@@ -366,7 +366,7 @@ exports.getBanners = async (req, res) => {
 exports.getBrands = async (req, res) => {
   try {
     const companies = await Company.find({ isActive: true })
-      .select('companyName email address country');
+      .select('companyName email address country companyLogo');
 
     res.json({ success: true, data: companies });
   } catch (error) {

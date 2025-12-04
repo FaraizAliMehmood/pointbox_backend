@@ -47,12 +47,12 @@ const customerSchema = new mongoose.Schema({
       type: Date,
       default: Date.now,
     },
+    redeem_points:{
+      type: Number,
+      default: 0
+    }
   }],
   totalPoints: {
-    type: Number,
-    default: 0,
-  },
-  redeemedPoints: {
     type: Number,
     default: 0,
   },
