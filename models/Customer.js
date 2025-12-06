@@ -50,8 +50,24 @@ const customerSchema = new mongoose.Schema({
     redeem_points:{
       type: Number,
       default: 0
+    },
+    tier_points:{
+      type: Number,
+      default:0
     }
   }],
+  // Store redeem_points for unlinked brands to preserve them when re-linking
+  // Format: { brandId: redeem_points }
+  unlinkedBrandsRedeemPoints: {
+    type: mongoose.Schema.Types.Mixed,
+    default: {}
+  },
+  // Store tier_points for unlinked brands to preserve them when re-linking
+  // Format: { brandId: tier_points }
+  unlinkedBrandsTierPoints: {
+    type: mongoose.Schema.Types.Mixed,
+    default: {}
+  },
   totalPoints: {
     type: Number,
     default: 0,
@@ -59,6 +75,10 @@ const customerSchema = new mongoose.Schema({
   isActive: {
     type: Boolean,
     default: true,
+  },
+  role: {
+    type: String,
+    default: "customer"
   },
   createdBy: {
     type: String,

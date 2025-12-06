@@ -10,6 +10,9 @@ const transporter = nodemailer.createTransport({
   },
 });
 
+// Socket Programming.
+// Real time Updates.
+// Real time responses.
 const sendEmail = async (to, subject, text, html) => {
   try {
     const info = await transporter.sendMail({

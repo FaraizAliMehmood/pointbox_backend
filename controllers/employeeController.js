@@ -10,6 +10,36 @@ const { uploadToCloudinary, deleteFromCloudinary } = require('../utils/cloudinar
 const { generateTransactionId } = require('../utils/export');
 const { sendEmail } = require('../config/email');
 
+// Helper function to safely get company ID from req.user
+const getCompanyId = (user) => {
+  if (!user || !user.company) {
+    return null;
+  }
+  
+  // If company is populated (object), get _id
+  if (user.company._id) {
+    return user.company._id;
+  }
+  
+  // If it's an ObjectId or string, return as is
+  return user.company;
+};
+
+// Helper function to get company name
+const getCompanyName = (user) => {
+  if (!user || !user.company) {
+    return null;
+  }
+  
+  // If company is populated (object), get companyName
+  if (user.company.companyName) {
+    return user.company.companyName;
+  }
+  
+  // Fallback to user's companyName field
+  return user.companyName || null;
+};
+
 // @desc    Login Employee
 // @route   POST /api/employee/login
 // @access  Public
@@ -61,6 +91,7 @@ exports.login = async (req, res) => {
 exports.verifyCustomer = async (req, res) => {
   try {
     const { phone, qrData } = req.body;
+    console.log(req.body);
 
     let customer;
     if (phone) {
@@ -79,9 +110,16 @@ exports.verifyCustomer = async (req, res) => {
     }
 
     // Check if customer is linked to employee's company and get that specific link
-    const companyId = req.user.company._id.toString();
+    const companyId = getCompanyId(req.user);
+    if (!companyId) {
+      return res.status(400).json({ success: false, message: 'Employee is not associated with a company' });
+    }
+    const companyIdString = companyId.toString();
     const companyLink = customer.linkedCompanies.find(
-      (link) => link.company.toString() === companyId
+      (link) => {
+        const linkCompanyId = link.company?._id?.toString() || link.company?.toString() || '';
+        return linkCompanyId === companyIdString;
+      }
     );
 
     if (!companyLink) {
@@ -121,6 +159,7 @@ exports.verifyCustomer = async (req, res) => {
         totalPoints: customer.totalPoints,
         // Points specific to this company from the linkedCompanies array
         companyPoints: companyLink?.redeem_points || 0,
+        tierPoints: companyLink.tier_points || 0,
         isLinked: true,
         linkedCompanies: linkedCompaniesData,
       },
@@ -161,9 +200,16 @@ exports.addRedeemPoints = async (req, res) => {
     }
 
     // Verify customer is linked to company and get that specific link
-    const companyId = req.user.company._id.toString();
+    const companyId = getCompanyId(req.user);
+    if (!companyId) {
+      return res.status(400).json({ success: false, message: 'Employee is not associated with a company' });
+    }
+    const companyIdString = companyId.toString();
     const companyLink = customer.linkedCompanies.find(
-      (link) => link.company.toString() === companyId
+      (link) => {
+        const linkCompanyId = link.company?._id?.toString() || link.company?.toString() || '';
+        return linkCompanyId === companyIdString;
+      }
     );
 
     if (!companyLink) {
@@ -192,14 +238,15 @@ exports.addRedeemPoints = async (req, res) => {
       : customer.totalPoints + points;
 
     // Create transaction
+    const companyName = getCompanyName(req.user) || 'Unknown Company';
     const transaction = await Transaction.create({
       transactionId: generateTransactionId(),
       customer: customer._id,
       customerName: customer.username,
       customerEmail: customer.email,
       customerPhone: customer.phone,
-      company: req.user.company._id,
-      companyName: req.user.company.companyName,
+      company: companyId,
+      companyName: companyName,
       employee: req.user._id,
       employeeName: req.user.name,
       type,
@@ -221,10 +268,12 @@ exports.addRedeemPoints = async (req, res) => {
     } else {
       customer.totalPoints += points;
       companyLink.redeem_points += points; 
+      companyLink.tier_points +=points;
+      console.log(companyLink.tier_points);
     }
 
     await customer.save();
-
+    
     res.status(201).json({
       success: true,
       data: transaction,
@@ -240,9 +289,14 @@ exports.addRedeemPoints = async (req, res) => {
 // @access  Private (Employee)
 exports.getRedeemHistory = async (req, res) => {
   try {
+    const companyId = getCompanyId(req.user);
+    if (!companyId) {
+      return res.status(400).json({ success: false, message: 'Employee is not associated with a company' });
+    }
+    
     const transactions = await Transaction.find({
       employee: req.user._id,
-      company: req.user.company._id,
+      company: companyId,
     })
       .populate('customer', 'username email phone')
       .sort({ createdAt: -1 });
@@ -604,7 +658,12 @@ exports.updateProduct = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Product not found' });
     }
 
-    if (product.company.toString() !== req.user.company._id.toString()) {
+    const companyId = getCompanyId(req.user);
+    if (!companyId) {
+      return res.status(400).json({ success: false, message: 'Employee is not associated with a company' });
+    }
+    
+    if (product.company.toString() !== companyId.toString()) {
       return res.status(403).json({ success: false, message: 'Not authorized' });
     }
 
@@ -641,7 +700,12 @@ exports.deleteProduct = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Product not found' });
     }
 
-    if (product.company.toString() !== req.user.company._id.toString()) {
+    const companyId = getCompanyId(req.user);
+    if (!companyId) {
+      return res.status(400).json({ success: false, message: 'Employee is not associated with a company' });
+    }
+    
+    if (product.company.toString() !== companyId.toString()) {
       return res.status(403).json({ success: false, message: 'Not authorized' });
     }
 
@@ -662,7 +726,19 @@ exports.deleteProduct = async (req, res) => {
 
 exports.Customers = async (req, res) => {
   try {
-    const companyId = req.user.company._id || req.user.company;
+    // Get company ID using helper function
+    const companyId = getCompanyId(req.user);
+    
+    // If still no companyId, return error
+    if (!companyId) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Employee is not associated with a company' 
+      });
+    }
+    
+    // Convert to string for comparison if needed
+    const companyIdString = companyId.toString();
     
     // Find all customers that are linked to the employee's company
     const customers = await Customer.find({
@@ -673,8 +749,10 @@ exports.Customers = async (req, res) => {
     const customersData = customers.map(customer => {
       // Find the specific linked company data for this employee's company
       const linkedCompany = customer.linkedCompanies.find(
-        (link) => link.company._id.toString() === companyId.toString() || 
-                  link.company.toString() === companyId.toString()
+        (link) => {
+          const linkCompanyId = link.company?._id?.toString() || link.company?.toString() || '';
+          return linkCompanyId === companyIdString;
+        }
       );
 
       // Map all linked companies, including redeem_points
@@ -742,10 +820,14 @@ exports.respondToQuery = async (req, res) => {
     }
 
     // Check if query belongs to employee's company
-    const employeeCompanyId = req.user.company._id.toString();
+    const employeeCompanyId = getCompanyId(req.user);
+    if (!employeeCompanyId) {
+      return res.status(400).json({ success: false, message: 'Employee is not associated with a company' });
+    }
+    const employeeCompanyIdString = employeeCompanyId.toString();
     const queryBrandId = query.brandId ? query.brandId.toString() : null;
     
-    if (queryBrandId && queryBrandId !== employeeCompanyId) {
+    if (queryBrandId && queryBrandId !== employeeCompanyIdString) {
       return res.status(403).json({ success: false, message: 'Not authorized to respond to this query' });
     }
 

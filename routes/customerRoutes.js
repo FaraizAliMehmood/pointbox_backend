@@ -61,7 +61,7 @@ router.get('/web/companies', getCompanies);
 router.post('/web/products', getCompanyProducts);
 router.get('/web/faqs', getFAQs);
 router.get('/web/newsletters', getNewsletters);
-router.get('/web/banners', getBrandsBanners);
+router.get('/web/banners', getBanners);
 
 module.exports = router;
 

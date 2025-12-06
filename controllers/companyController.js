@@ -1047,12 +1047,12 @@ exports.respondToQuery = async (req, res) => {
 
     // Send email response to customer
     try {
-      await sendEmail(
-        query.customerEmail,
-        `Re: ${query.subject}`,
-        response,
-        `<p>${response}</p>`
-      );
+      // await sendEmail(
+      //   query.customerEmail,
+      //   `Re: ${query.subject}`,
+      //   response,
+      //   `<p>${response}</p>`
+      // );
     } catch (emailError) {
       console.error('Error sending email:', emailError);
       // Continue even if email fails

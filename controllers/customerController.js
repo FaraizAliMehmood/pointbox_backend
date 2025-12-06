@@ -15,9 +15,6 @@ const Notification = require('../models/Notification');
 const NewsLetterEmails = require('../models/NewsLetterEmails');
 
 
-// @desc    Register Customer
-// @route   POST /api/customer/signup
-// @access  Public
 exports.signup = async (req, res) => {
   try {
     const { username, email, password, phone, address, country } = req.body;
@@ -111,6 +108,7 @@ exports.login = async (req, res) => {
 // @access  Private (Customer)
 exports.getProfile = async (req, res) => {
   try {
+    console.log("Profile:",req.user._id);
     const customer = await Customer.findById(req.user._id)
       .populate('linkedCompanies.company', 'companyName email redeem_points');
 
@@ -354,7 +352,22 @@ exports.getBanners = async (req, res) => {
     const banners = await Banner.find({ isActive: true })
       .sort({ createdAt: -1 });
 
-    res.json({ success: true, data: banners });
+    // Filter out special_events banners where endDate has passed
+    const currentDate = new Date();
+    const filteredBanners = banners.filter(banner => {
+      // If it's a special_event banner, check if endDate has passed
+      if (banner.type === 'special_event' && banner.endDate) {
+        const endDate = new Date(banner.endDate);
+        // If endDate is in the past, exclude this banner
+        if (endDate < currentDate) {
+          return false;
+        }
+      }
+      // Include all regular banners and special_event banners that haven't expired
+      return true;
+    });
+
+    res.json({ success: true, data: filteredBanners });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
@@ -374,7 +387,7 @@ exports.getBrands = async (req, res) => {
   }
 };
 
-// @desc    Link/Unlink Brand
+// @desc    Link Brand
 // @route   POST /api/customer/link-brand
 // @access  Private (Customer)
 exports.linkBrand = async (req, res) => {
@@ -419,18 +432,18 @@ exports.linkBrand = async (req, res) => {
     );
 
     if (isLinked) {
-      // Remove link
-      customer.linkedCompanies = customer.linkedCompanies.filter(
-        (link) => link.company.toString() !== brandId.toString()
-      );
-    } else {
-      // Add link
-      customer.linkedCompanies.push({
-        company: brandId,
-        companyName: company.companyName,
-        linkedAt: new Date(),
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Brand is already linked' 
       });
     }
+
+    // Add link
+    customer.linkedCompanies.push({
+      company: brandId,
+      companyName: company.companyName,
+      linkedAt: new Date(),
+    });
 
     await customer.save();
 
@@ -451,7 +464,7 @@ exports.linkBrand = async (req, res) => {
 
     res.json({
       success: true,
-      message: isLinked ? 'Brand unlinked successfully' : 'Brand linked successfully',
+      message: 'Brand linked successfully',
       data: {
         linkedBrands,
         customer: updatedCustomer,
@@ -468,7 +481,7 @@ exports.linkBrand = async (req, res) => {
 exports.getLinkedBrands = async (req, res) => {
   try {
     const customer = await Customer.findById(req.user._id)
-      .populate('linkedCompanies.company', 'companyName email address country');
+      .populate('linkedCompanies.company', 'companyName email address country companyLogo');
 
     res.json({
       success: true,
@@ -490,7 +503,7 @@ exports.getProducts = async (req, res) => {
     const products = await Product.find({
       company: { $in: linkedCompanyIds },
       isActive: true,
-    }).populate('company', 'companyName');
+    }).populate('company', 'companyName companyLogo');
 
     res.json({ success: true, data: products });
   } catch (error) {
