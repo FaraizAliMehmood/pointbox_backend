@@ -11,6 +11,7 @@ const { generateToken } = require('../middleware/auth');
 const { uploadToCloudinary, deleteFromCloudinary } = require('../utils/cloudinaryUpload');
 const { exportToCSV, exportToXLSX, exportToPDF } = require('../utils/export');
 const { sendEmail } = require('../config/email');
+const moment = require("moment");
 
 // @desc    Register Company
 // @route   POST /api/company/signup
@@ -1047,12 +1048,11 @@ exports.respondToQuery = async (req, res) => {
 
     // Send email response to customer
     try {
-      // await sendEmail(
-      //   query.customerEmail,
-      //   `Re: ${query.subject}`,
-      //   response,
-      //   `<p>${response}</p>`
-      // );
+      await sendEmail(
+        query.customerEmail,
+        `Re: ${query.subject}`,
+        response
+      );
     } catch (emailError) {
       console.error('Error sending email:', emailError);
       // Continue even if email fails
@@ -1063,4 +1063,122 @@ exports.respondToQuery = async (req, res) => {
     res.status(400).json({ success: false, message: error.message });
   }
 };
+
+function generateOTP() {
+  const otp = Math.floor(1000 + Math.random() * 9000);
+  return otp.toString();
+}
+//check otp expiration
+function isOTPExpired(createdAt){
+    const expirationTime = moment(createdAt).add(10,"minutes")
+    return moment()>expirationTime;
+}
+
+exports.checkEmail = async(req,res)=>{
+  try {
+    const data = await Company.findOne({email: req.body.email})
+    if(!data){
+      return res.status(401).json({message: "Email with this account does not exist."})
+    }
+    const otp = generateOTP();
+    const response =  await sendEmail(
+       req.body.email,
+       "Otp verification",
+      `Your otp code is ${otp} and do remember otp will expire after 10 minutes.`
+    );
+         if(response){
+          const Data = await Company.findByIdAndUpdate(
+            {_id: data._id},
+            {$set: {otp: otp}},
+             {new: true});
+             res.status(200).json({success: true, message: "OTP sent successfully. Please check your email."})
+         }
+  } catch (error) {
+    res.status(400).json({ success: false, message: error.message });
+  }
+}
+exports.verifyOtp = async(req,res)=>{
+  try {
+      let user = await Company.findOne({otp: req.body.otp});
+      if(!user){
+        return res.status(400).json({success:false, message: "Code not found"})
+      }else{
+         
+         const isExpired = isOTPExpired(user.updatedAt);
+          if(isExpired){
+               res.status(400).json({success:false, message: "Your otp is expired"})
+          }else{
+              const Data = await Company.findByIdAndUpdate(
+                  {_id: user._id},
+                  {$set: {otp: 0}},
+                  {new: true}).select("-password");
+     res.status(200).json({success: true, message:"account verified successfully"});
+          }
+          }
+      }catch (error) {
+    console.log(error.message);
+     return res.status(500).json({success:false, message: "Internal server error"})
+  }
+};
+
+exports.changePasswordWithOTP = async (req, res) => {
+  try {
+    const { email, newPassword } = req.body;
+
+    // Validate required fields
+    if (!email || !newPassword) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Email and new password are required' 
+      });
+    }
+
+    // Validate new password length
+    if (newPassword.length < 6) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'New password must be at least 6 characters long' 
+      });
+    }
+
+    // Find the admin by email
+    const company = await Company.findOne({ email: email.toLowerCase().trim() }).select('+password');
+
+    if (!company) {
+      return res.status(404).json({ 
+        success: false, 
+        message: 'Admin not found' 
+      });
+    }
+
+    // Verify that OTP was verified (OTP should be 0 after verification)
+    if (company.otp !== 0) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Please verify OTP first' 
+      });
+    }
+
+    // Hash the new password
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+    
+    // Update password and reset OTP
+    company.password = hashedPassword;
+    company.otp = 0;
+    await company.save();
+
+    res.json({ 
+      success: true, 
+      message: 'Password updated successfully'
+    });
+  } catch (error) {
+    console.log(error.message);
+    res.status(500).json({ 
+      success: false, 
+      message: 'Internal server error' 
+    });
+  }
+};
+
+
 

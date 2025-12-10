@@ -46,7 +46,9 @@ const {
   getSuperAdmins,
   updateSuperAdminPassword,
   getContacts,
-
+  checkEmail,
+  verifyOtp,
+  notifications
 } = require('../controllers/superAdminController');
 const { protectSuperAdmin } = require('../middleware/auth');
 const { uploadSingle, uploadLogo } = require('../middleware/upload');
@@ -54,7 +56,9 @@ const { uploadSingle, uploadLogo } = require('../middleware/upload');
 // Public routes
 router.post('/signup', signup);
 router.post('/login', login);
-
+router.post('/check-email',checkEmail);
+router.post('/verify-otp',verifyOtp);
+router.post("/notifications",notifications)
 router.get('/web/newsletters', getNewsletters);
 
 // Protected routes
@@ -116,10 +120,13 @@ router.delete('/newsletter-emails/:id',protectSuperAdmin, deleteNewsletterEmail)
 
 // Super Admin management routes
 router.get('/super-admins', protectSuperAdmin, getSuperAdmins);
-router.put('/super-admins/:id/password', protectSuperAdmin, updateSuperAdminPassword);
+router.put('/change-password', updateSuperAdminPassword);
 
 router.get("/contacts", getContacts);
+
 // router.post("/contacts/:id/respond", protectSuperAdmin, respondToContact);
+
+
 
 module.exports = router;
 

@@ -15,6 +15,7 @@ const { generateToken } = require('../middleware/auth');
 const { uploadToCloudinary, deleteFromCloudinary } = require('../utils/cloudinaryUpload');
 const { sendEmail } = require('../config/email');
 const { sendNotificationToUsers } = require('../utils/fcmService');
+const moment = require("moment");
 
 // Helper function to check permissions
 const checkPermission = (admin, permission) => {
@@ -1382,4 +1383,124 @@ exports.getContacts = async (req, res) => {
   }
 };
 
+function generateOTP() {
+  const otp = Math.floor(1000 + Math.random() * 9000);
+  return otp.toString();
+}
+//check otp expiration
+function isOTPExpired(createdAt){
+    const expirationTime = moment(createdAt).add(10,"minutes")
+    return moment()>expirationTime;
+}
+
+exports.checkEmail = async(req,res)=>{
+  try {
+    const data = await Admin.findOne({email: req.body.email})
+    if(!data){
+      return res.status(401).json({success: false, message: "Email with this account does not exist."})
+    }
+    const otp = Math.floor(1000 + Math.random() * 9000).toString();
+    const response =  await sendEmail(
+       req.body.email,
+       "Otp verification",
+      `Your otp code is ${otp} and do remember otp will expire after 10 minutes.`
+    );
+         if(response){
+          const Data = await Admin.findByIdAndUpdate(
+            {_id: data._id},
+            {$set: {otp: otp}},
+             {new: true});
+          res.status(200).json({success: true, message: "OTP sent successfully. Please check your email."})
+         } else {
+          res.status(500).json({success: false, message: "Failed to send OTP. Please try again."})
+         }
+  } catch (error) {
+    res.status(400).json({ success: false, message: error.message });
+  }
+}
+exports.verifyOtp = async(req,res)=>{
+  try {
+      let user = await Admin.findOne({otp: req.body.otp});
+      if(!user){
+        return res.status(400).json({success:false, message: "Code not found"})
+      }else{
+         
+         const isExpired = isOTPExpired(user.updatedAt);
+          if(isExpired){
+               res.status(400).json({success:false, message: "Your otp is expired"})
+          }else{
+              const Data = await Admin.findByIdAndUpdate(
+                  {_id: user._id},
+                  {$set: {otp: 0}},
+                  {new: true}).select("-password");
+     res.status(200).json({success: true, message:"account verified successfully"});
+          }
+          }
+      }catch (error) {
+    console.log(error.message);
+     return res.status(500).json({success:false, message: "Internal server error"})
+  }
+};
+
+// @desc    Change password with OTP verification
+// @route   PUT /api/admin/change-password
+// @access  Public (after OTP verification)
+exports.changePasswordWithOTP = async (req, res) => {
+  try {
+    const { email, newPassword } = req.body;
+
+    // Validate required fields
+    if (!email || !newPassword) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Email and new password are required' 
+      });
+    }
+
+    // Validate new password length
+    if (newPassword.length < 6) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'New password must be at least 6 characters long' 
+      });
+    }
+
+    // Find the admin by email
+    const admin = await Admin.findOne({ email: email.toLowerCase().trim() }).select('+password');
+
+    if (!admin) {
+      return res.status(404).json({ 
+        success: false, 
+        message: 'Admin not found' 
+      });
+    }
+
+    // Verify that OTP was verified (OTP should be 0 after verification)
+    if (admin.otp !== 0) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Please verify OTP first' 
+      });
+    }
+
+    // Hash the new password
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+    
+    // Update password and reset OTP
+    admin.password = hashedPassword;
+    admin.otp = null;
+    await admin.save();
+
+    res.json({ 
+      success: true, 
+      message: 'Password updated successfully'
+    });
+  } catch (error) {
+    console.log(error.message);
+    res.status(500).json({ 
+      success: false, 
+      message: 'Internal server error' 
+    });
+  }
+};
 

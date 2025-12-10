@@ -5,7 +5,6 @@ const {
   login,
   updateAdminPassword,
   updateCompany,
-  changePassword,
   createCustomer,
   getCustomers,
   updateCustomer,
@@ -29,7 +28,10 @@ const {
   uploadBanner,
   getBanners,
   updateBanner,
-  deleteBanner
+  deleteBanner,
+  verifyOtp,
+  checkEmail,
+  changePasswordWithOTP
 } = require('../controllers/companyController');
 const { protectCompany } = require('../middleware/auth');
 const { uploadSingle, uploadLogo } = require('../middleware/upload');
@@ -37,12 +39,13 @@ const { uploadSingle, uploadLogo } = require('../middleware/upload');
 // Public routes
 router.post('/signup',uploadLogo,signup);
 router.post('/login', login);
-
-
+router.post('/check-email',checkEmail);
+router.post('/verify-otp',verifyOtp);
+router.put('/change-password',changePasswordWithOTP);
 // Protected routes
 router.get('/profile', protectCompany, getCompanyProfile);
 router.put('/profile', protectCompany, uploadLogo, updateCompany);
-router.put('/change-password', protectCompany, changePassword);
+
 router.post('/customers', protectCompany, createCustomer);
 router.get('/customers', protectCompany, getCustomers);
 router.put('/customers/:id', protectCompany, updateCustomer);

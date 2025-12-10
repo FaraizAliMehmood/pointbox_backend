@@ -93,6 +93,9 @@ const customerSchema = new mongoose.Schema({
     type: String,
     enum: ['SuperAdmin', 'Company'],
   },
+  otp:{
+    type: Number
+  },
   fcmTokens: [{
     token: {
       type: String,

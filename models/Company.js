@@ -58,6 +58,9 @@ publicId:{
   isActive: {
     type: Boolean,
     default: true,
+  },
+  otp:{
+    type: Number
   }
 }, {
   timestamps: true,

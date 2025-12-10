@@ -17,6 +17,9 @@ const { uploadToCloudinary, deleteFromCloudinary } = require('../utils/cloudinar
 const { sendEmail } = require('../config/email');
 const { generateTransactionId } = require('../utils/export');
 const { sendNotificationToUsers } = require('../utils/fcmService');
+const moment = require("moment");
+const {JWT} = require("google-auth-library");
+const axios = require('axios')
 
 // @desc    Register Super Admin
 // @route   POST /api/superadmin/signup
@@ -25,6 +28,8 @@ exports.signup = async (req, res) => {
   try {
     const { username, email, password } = req.body;
 
+
+    const hashedPassword = await bcrypt.hash(password,10)
     const superAdmin = await SuperAdmin.findOne({email})
     if(superAdmin){
         return res.status(400).json({ 
@@ -35,7 +40,7 @@ exports.signup = async (req, res) => {
       const superAdmin = await SuperAdmin.create({
         username,
         email,
-        password,
+        password: hashedPassword
       });
   
       const token = generateToken(superAdmin._id, 'superadmin');
@@ -67,12 +72,15 @@ exports.login = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Please provide email and password' });
     }
 
-    const superAdmin = await SuperAdmin.findOne({ email }).select('+password');
-
-    if (!superAdmin || !(await superAdmin.comparePassword(password))) {
-      return res.status(401).json({ success: false, message: 'Invalid credentials' });
+    const superAdmin = await SuperAdmin.findOne({ email: email }).select('+password');
+    if (!superAdmin) {
+      return res.status(400).json({success: false, message: "Please enter the correct email" });
     }
-
+    const passwordCompare = await bcrypt.compare(password, superAdmin.password);
+    if (!passwordCompare) {
+      return res.status(400).json({ success:false, message: "Please enter the correct password", });
+    }
+   
     if (!superAdmin.isActive) {
       return res.status(401).json({ success: false, message: 'Account is deactivated' });
     }
@@ -190,8 +198,7 @@ exports.respondToContact = async (req, res) => {
     await sendEmail(
       contact.email,
       `Re: ${contact.subject}`,
-      response,
-      `<p>${response}</p>`
+      response
     );
 
     res.json({ success: true, data: contact, message: 'Response sent successfully' });
@@ -1348,13 +1355,13 @@ exports.getSuperAdmins = async (req, res) => {
 // @access  Private (Super Admin)
 exports.updateSuperAdminPassword = async (req, res) => {
   try {
-    const { currentPassword, newPassword } = req.body;
+    const { email, newPassword } = req.body;
 
     // Validate required fields
-    if (!currentPassword || !newPassword) {
+    if (!newPassword) {
       return res.status(400).json({ 
         success: false, 
-        message: 'Current password and new password are required' 
+        message: ' new password are required' 
       });
     }
 
@@ -1367,36 +1374,280 @@ exports.updateSuperAdminPassword = async (req, res) => {
     }
 
     // Find the super admin and include password field
-    const superAdmin = await SuperAdmin.findById(req.params.id).select('+password');
+    const superAdmin = await SuperAdmin.findOne({email}).select('+password');
 
     if (!superAdmin) {
       return res.status(404).json({ success: false, message: 'Super admin not found' });
     }
-
-    // Verify current password
-    const isPasswordCorrect = await superAdmin.comparePassword(currentPassword);
-    if (!isPasswordCorrect) {
-      return res.status(401).json({ 
-        success: false, 
-        message: 'Current password is incorrect' 
-      });
-    }
-
     // Update password
-    superAdmin.password = newPassword;
+    const hashedPassword = await bcrypt.hash(newPassword,10)
+    superAdmin.password = hashedPassword;
     await superAdmin.save();
-
     res.json({ 
       success: true, 
-      message: 'Password updated successfully',
-      data: {
-        id: superAdmin._id,
-        username: superAdmin.username,
-        email: superAdmin.email,
-      }
+      message: 'Password updated successfully'
     });
   } catch (error) {
     res.status(400).json({ success: false, message: error.message });
   }
 };
 
+function generateOTP() {
+  const otp = Math.floor(1000 + Math.random() * 9000);
+  return otp.toString();
+}
+//check otp expiration
+function isOTPExpired(createdAt){
+    const expirationTime = moment(createdAt).add(10,"minutes")
+    return moment()>expirationTime;
+}
+
+exports.checkEmail = async(req,res)=>{
+  try {
+    const data = await SuperAdmin.findOne({email: req.body.email})
+    if(!data){
+      return res.status(401).json({success: false,message: "Email with this account does not exist."})
+    }
+    const otp = generateOTP();
+    const response =  await sendEmail(
+       req.body.email,
+       "Otp verification",
+      `Your otp code is ${otp} and do remember otp will expire after 10 minutes.`
+    );
+         if(response){
+          const Data = await SuperAdmin.findByIdAndUpdate(
+            {_id: data._id},
+            {$set: {otp: otp}},
+             {new: true});
+res.status(200).json({success: true,message: "Please check your email."})
+         }
+  } catch (error) {
+    res.status(400).json({ success: false, message: error.message });
+  }
+}
+exports.verifyOtp = async(req,res)=>{
+  try {
+      let user = await SuperAdmin.findOne({otp: req.body.otp});
+      if(!user){
+        return res.status(400).json({success:false, message: "Code not found"})
+      }else{
+         
+         const isExpired = isOTPExpired(user.updatedAt);
+          if(isExpired){
+               res.status(400).json({success:false, message: "Your otp is expired"})
+          }else{
+              const Data = await SuperAdmin.findByIdAndUpdate(
+                  {_id: user._id},
+                  {$set: {otp: 0}},
+                  {new: true}).select("-password");
+     res.status(200).json({success: true, message:"account verified successfully"});
+          }
+          }
+      }catch (error) {
+    console.log(error.message);
+     return res.status(500).json({success:false, message: "Internal server error"})
+  }
+};
+
+
+const SCOPES = ["https://www.googleapis.com/auth/firebase.messaging"];
+const client = new JWT({
+    email: "firebase-adminsdk-fbsvc@pointbox-3f28b.iam.gserviceaccount.com",
+    key: "-----BEGIN PRIVATE KEY-----\nMIIEvAIBADANBgkqhkiG9w0BAQEFAASCBKYwggSiAgEAAoIBAQDFcp7b98S2Ovoo\nAIMyGuhzC6HwG5/q0pDHjmhbF4FWy0s9MykbO+qjlxwp0eFzvcNv0iNzfsFJzLrX\nj8unJ3QcSQrcqDHleiU9vsKSp8vVpNWLQwbJdO6DYU2s0csiYmbUNAe2ul7NjHvK\nJNiRBQ8CmVJjh0OEF+J4Xj5YEI61q/XnxckPGH1Zw/hqMGDvoAOrc2RbmSDJjnEC\nqdxeb9HN6Tr67/DevlimUzFAP9RU7CywPIrNu41cfdw/6T/oysQNaYvo1T6OZFr5\npSND6F10TfS7MtUwjQdUT5rZeddKYcIev2Qxcs/bvNzWwRzMA/xElUaxYBpDoW9d\nDA3qILedAgMBAAECggEADdybLIQ7ijOfxlkq3MSo1xLU/p9h3cGEqo3j46lFyksh\ncB18YE4Xjf6Y2pLCijajVuFg3cXjWgQGhgWxXX3Wl/nEynMAdcTagng2/sbK96fH\n2iwNeO09pXmaU2yzHynbYEB63ig9aZ7YPfvSPHQndp4++3/OjKKEosCzDcmzyys0\nr3eGHwDKfs9d9jTwIzpFxitPe3bfibsVQ9wh9eLd24NHADkuFJZsWEW6HGWlrU+h\nlENN26ULYk5Ts4OiTBb4SPdYqBHMcHEQBPVGxr6Nt1yvA08VIXm4v+1jDPcQSLh6\nbAMxz+E2PaTiD3ovbWEMSklL8GE3Hh5WROsSnqFAQQKBgQD5FhBSkiSnNbt3/3TL\nRYIadcSLsI9257+Y/ysPlnYbIg5PeY2CHQU4IRtUHjhSDt91dYUoNIIJ9/xKWx+e\nugVHLPNxRxP8ULwBcuLGREjIjOxG4RR3+fxGcHy6kTzn9mtRqkksPHUu2juBklVk\nlc/3B4rrnFCyeh/vOBiRP8b5sQKBgQDK7aDmIN+ACDiIHnSuFM/Kzj5OTcPkDEhO\naz3u/65HpfMmgvztoQjOsNYG96UiEwK05fumF8Fwu9JNodV9z5yuyh1SziFgYmhk\nw7lrhPlqLUyD2Bw5rwjP7qp7jdZgWFDYsndXVXgkRNKpwV/t331RHOdKPce2nE0C\nqWk/QV1rrQKBgEWZLKZlv2gZU3CMKI5Dtb6++VQu2WdYCekuI1IPsKCUO3tpc2jP\nww2T8pbmesYy8a1YUQSS52Lxr8T3ATbQs3jXzo3wVl1CEcY127eajNu8xKhpa9a6\nOwtTkwZuXp5R9Fq1QgziN7wHrmjeAo5AbgOQT/jVjJbSGOo2umabc3WBAoGAQff4\nG3fKUHvbrNyBv+nCF0Lu3FPJf8RCaUPRsXVq+Z3IKtfgU3vLOi4glclB5I7bjWVK\nZpdIalaUqmoW1jx8yhGocLfT/9pd54v9JifnUQ4C1sWVf2cYbUhAIcRdUZrERX3W\n8Aw370p0VX0oq1LBEXJc+jSVTRcIrfnW3hpovU0CgYAcI8ks7O8ZHj4XhzBMLdrD\nn1wUtAYiHwpo17ArYNBoFwsuSuLtu1tzC84VeMOUZWetx/72RqMU+s8ziheM8iFL\npwPyB9bB9jPtoNpHZjL5EDLjIrkgEuqNM49Zn5llJSqIo/aMyfVtDrIGIbJgR2B1\nXrN/IoHUcA23NTfSI1Fp2w==\n-----END PRIVATE KEY-----\n",
+    scopes: SCOPES
+})
+// exports.notifications =  async (req, res) => {
+//   try {
+//     // Assuming client.authorize() returns tokens and token has access_token
+//     const tokens = await client.authorize();
+//     const token = tokens.access_token;
+//     console.log("Access Token:", token);
+//     console.log(req.body);
+
+//     // Get web app base URL from environment variable or use default
+//     // This should be the URL where your web app is hosted (e.g., https://yourdomain.com)
+//     const webAppBaseUrl = process.env.WEB_APP_URL || process.env.FRONTEND_URL || 'https://pointbox-3f28b.web.app';
+    
+//     // Construct icon URL - using web app manifest icon for notifications
+//     const iconUrl = `${webAppBaseUrl}/web-app-manifest-192x192.png`;
+//     // Optionally use a different image URL if you have one
+//     const imageUrl = req.body.imageUrl || iconUrl;
+
+//     // FCM v1 API: notification object only supports title and body
+//     const notification = {
+//       "title": req.body.titleText,
+//       "body": req.body.bodyText
+//     };
+
+//     const message = {
+//       "message": {
+//         "token": req.body.deviceToken, // Device token passed from request body
+//         "notification": notification,
+//         // Web push notification with custom icon
+//         "webpush": {
+//           "notification": {
+//             "title": req.body.titleText,
+//             "body": req.body.bodyText,
+//             "icon": iconUrl,
+//             "image": imageUrl
+//             // Note: badge is handled by service worker, not set here
+//           },
+//           "fcm_options": {
+//             "link": req.body.clickAction || webAppBaseUrl
+//           }
+//         },
+//         // Android notification with custom icon
+//         "android": {
+//           "notification": {
+//             "title": req.body.titleText,
+//             "body": req.body.bodyText,
+//             "icon": "ic_notification", // Android uses local resource name, or you can use a URL
+//             "image": imageUrl,
+//             "channelId": "default",
+//             "sound": "default"
+//           }
+//         },
+//         // iOS/APNS notification
+//         "apns": {
+//           "payload": {
+//             "aps": {
+//               "alert": {
+//                 "title": req.body.titleText,
+//                 "body": req.body.bodyText
+//               },
+//               "sound": "default",
+//               "badge": 1
+//             }
+//           },
+//           "fcm_options": {
+//             "image": imageUrl
+//           }
+//         }
+//       }
+//     };
+
+//     const headers = {
+//       'Authorization': `Bearer ${token}`,
+//       'Content-Type': 'application/json'
+//     };
+//     console.log(req.body);
+//     // Send notification via Axios to Firebase Cloud Messaging API
+//     const response = await axios.post(
+//       'https://fcm.googleapis.com/v1/projects/pointbox-3f28b/messages:send',
+//       message,
+//       { headers }
+//     );
+
+//     // Respond back with the API response data
+//     res.json(response.data);
+//     console.log('Response data:', response.data);
+
+//   } catch (error) {
+//     // Handle error and send response with error details
+//     console.error('Error making POST request:', error);
+    
+//     // Axios error response structure
+//     if (error.response) {
+//       // If error is from Axios, send the error response from the API
+//       res.status(error.response.status).json(error.response.data);
+//     } else {
+//       // Handle any other errors (e.g., network issues)
+//       res.status(500).json({ error: 'Internal Server Error', message: error.message });
+//     }
+//   }
+// }
+
+exports.notifications = async (req, res) => {
+  try {
+    const tokens = await client.authorize();
+    const token = tokens.access_token;
+
+    const deviceTokens = req.body.deviceTokens; // expect array
+    if (!Array.isArray(deviceTokens)) {
+      return res.status(400).json({ error: "deviceTokens must be an array" });
+    }
+
+    const webAppBaseUrl = process.env.WEB_APP_URL || process.env.FRONTEND_URL || 'https://pointbox-3f28b.web.app';
+    const iconUrl = `${webAppBaseUrl}/web-app-manifest-192x192.png`;
+    const imageUrl = req.body.imageUrl || iconUrl;
+
+    const notification = {
+      title: req.body.titleText,
+      body: req.body.bodyText
+    };
+
+    const headers = {
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json'
+    };
+
+    const results = [];
+   console.log(deviceTokens);
+    for (const deviceToken of deviceTokens) {
+      const message = {
+        message: {
+          token: deviceToken,
+          notification,
+          webpush: {
+            notification: {
+              title: req.body.titleText,
+              body: req.body.bodyText,
+              icon: iconUrl,
+              image: imageUrl
+            },
+            fcm_options: {
+              link: req.body.clickAction || webAppBaseUrl
+            }
+          },
+          android: {
+            notification: {
+              title: req.body.titleText,
+              body: req.body.bodyText,
+              icon: "ic_notification",
+              image: imageUrl,
+              channelId: "default",
+              sound: "default"
+            }
+          },
+          apns: {
+            payload: {
+              aps: {
+                alert: {
+                  title: req.body.titleText,
+                  body: req.body.bodyText
+                },
+                sound: "default",
+                badge: 1
+              }
+            },
+            fcm_options: {
+              image: imageUrl
+            }
+          }
+        }
+      };
+
+      try {
+        const response = await axios.post(
+          'https://fcm.googleapis.com/v1/projects/pointbox-3f28b/messages:send',
+          message,
+          { headers }
+        );
+        results.push({ token: deviceToken, success: true, response: response.data });
+      } catch (err) {
+        console.log(err.message)
+        results.push({
+          token: deviceToken,
+          success: false,
+         // error: err.response?.data || err.message
+        });
+      }
+    }
+
+    res.json({ results });
+
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Internal Server Error", message: error.message });
+  }
+};

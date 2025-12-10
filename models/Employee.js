@@ -55,6 +55,9 @@ const employeeSchema = new mongoose.Schema({
     manageProducts: { type: Boolean, default: false },
     manageBanners: { type: Boolean, default: false },
   },
+  otp:{
+    type: Number
+  },
   fcmTokens: [{
     token: {
       type: String,

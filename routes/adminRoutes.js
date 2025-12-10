@@ -39,13 +39,19 @@ const {
   updateNewsletterEmail,
   deleteNewsletterEmail,
   getNewsletterEmailById,
-  getContacts
+  getContacts,
+  checkEmail,
+  verifyOtp,
+  changePasswordWithOTP
 } = require('../controllers/adminController');
 const { protectAdmin } = require('../middleware/auth');
 const { uploadLogo, uploadSingle } = require('../middleware/upload');
 
 // Public route - Login (no authentication required)
 router.post('/login', login);
+router.post('/check-email',checkEmail);
+router.post('/verify-otp',verifyOtp);
+router.put('/change-password', changePasswordWithOTP);
 router.get("/contacts", getContacts);
 router.get('/faqs',protectAdmin, getFAQs);
 router.post('/faqs',protectAdmin , createFAQ);

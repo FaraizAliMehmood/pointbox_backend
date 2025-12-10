@@ -13,7 +13,7 @@ const { sendEmail } = require('../config/email');
 const FAQ = require('../models/FAQ');
 const Notification = require('../models/Notification');
 const NewsLetterEmails = require('../models/NewsLetterEmails');
-
+const moment = require("moment");
 
 exports.signup = async (req, res) => {
   try {
@@ -56,16 +56,15 @@ exports.signup = async (req, res) => {
 // @access  Public
 exports.login = async (req, res) => {
   try {
-    const { email, password } = req.body;
+    const { email, password,deviceToken, deviceType } = req.body;
 
     if (!email || !password) {
       return res.status(400).json({ success: false, message: 'Please provide email and password' });
     }
 
     const customer = await Customer.findOne({ email }).select('+password');
-
     if (!customer) {
-      return res.status(401).json({ success: false, message: 'Invalid credentials' });
+      return res.status(401).json({ success: false, message: `You don't have an account.Sign up please` });
     }
 
     if (customer.isGoogleSignup && !password) {
@@ -86,8 +85,33 @@ exports.login = async (req, res) => {
     if (!customer.isActive) {
       return res.status(401).json({ success: false, message: 'Account is deactivated' });
     }
+      // Validate deviceType
+      if (['mobile', 'web'].includes(deviceType)) {
+        // Check if token already exists
+        const existingTokenIndex = customer.fcmTokens.findIndex(
+          (fcmTokenObj) => fcmTokenObj.token === deviceToken
+        );
+
+        if (existingTokenIndex !== -1) {
+          // Update existing token
+          customer.fcmTokens[existingTokenIndex].deviceType = deviceType;
+          customer.fcmTokens[existingTokenIndex].updatedAt = new Date();
+        } else {
+          // Add new token
+          customer.fcmTokens.push({
+            token: deviceToken,
+            deviceType,
+            updatedAt: new Date(),
+          });
+      }
+    }
 
     const token = generateToken(customer._id, 'customer');
+
+    // Save customer if FCM token was updated
+    if (deviceToken && deviceType) {
+      await customer.save();
+    }
 
     // Convert to plain object and remove sensitive fields
     const customerData = customer.toObject();
@@ -793,3 +817,117 @@ exports.getBrandsBanners = async (req, res) => {
   }
 };
 
+function generateOTP() {
+  const otp = Math.floor(1000 + Math.random() * 9000);
+  return otp.toString();
+}
+//check otp expiration
+function isOTPExpired(createdAt){
+    const expirationTime = moment(createdAt).add(10,"minutes")
+    return moment()>expirationTime;
+}
+
+exports.checkEmail = async(req,res)=>{
+  try {
+    const data = await Customer.findOne({email: req.body.email})
+    if(!data){
+       return res.status(401).json({message: "Email with this account does not exist."})
+    }
+    const otp = generateOTP();
+    const response =  await sendEmail(
+       req.body.email,
+       "Otp verification",
+      `Your otp code is ${otp} and do remember otp will expire after 10 minutes.`
+    );
+         if(response){
+          const Data = await Customer.findByIdAndUpdate(
+            {_id: data._id},
+            {$set: {otp: otp}},
+             {new: true});
+             res.status(200).json({success: true, message: "OTP sent successfully. Please check your email."})
+         }
+  } catch (error) {
+    res.status(400).json({ success: false, message: error.message });
+  }
+}
+exports.verifyOtp = async(req,res)=>{
+  try {
+      let user = await Customer.findOne({otp: req.body.otp});
+      if(!user){
+        return res.status(400).json({success:false, message: "Code not found"})
+      }else{
+         
+         const isExpired = isOTPExpired(user.updatedAt);
+          if(isExpired){
+               res.status(400).json({success:false, message: "Your otp is expired"})
+          }else{
+              const Data = await Customer.findByIdAndUpdate(
+                  {_id: user._id},
+                  {$set: {otp: 0}},
+                  {new: true}).select("-password");
+     res.status(200).json({success: true, message:"account verified successfully"});
+          }
+          }
+      }catch (error) {
+    console.log(error.message);
+     return res.status(500).json({success:false, message: "Internal server error"})
+  }
+};
+exports.changePasswordWithOTP = async (req, res) => {
+  try {
+    const { email, newPassword } = req.body;
+
+    // Validate required fields
+    if (!email || !newPassword) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Email and new password are required' 
+      });
+    }
+
+    // Validate new password length
+    if (newPassword.length < 6) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'New password must be at least 6 characters long' 
+      });
+    }
+
+    // Find the admin by email
+    const customer = await Customer.findOne({ email: email.toLowerCase().trim() }).select('+password');
+
+    if (!customer) {
+      return res.status(404).json({ 
+        success: false, 
+        message: 'Admin not found' 
+      });
+    }
+
+    // Verify that OTP was verified (OTP should be 0 after verification)
+    if (customer.otp !== 0) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Please verify OTP first' 
+      });
+    }
+
+    // Hash the new password
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+    
+    // Update password and reset OTP
+    customer.password = hashedPassword;
+    customer.otp = 0;
+    await customer.save();
+
+    res.json({ 
+      success: true, 
+      message: 'Password updated successfully'
+    });
+  } catch (error) {
+    console.log(error.message);
+    res.status(500).json({ 
+      success: false, 
+      message: 'Internal server error' 
+    });
+  }
+};

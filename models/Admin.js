@@ -16,6 +16,9 @@ const adminSchema = new mongoose.Schema({
     minlength: 6,
     select: false,
   },
+  otp:{
+    type: Number
+  },
   permissions: {
     manageCompanies: { type: Boolean, default: false },
     manageEmployees: { type: Boolean, default: false },

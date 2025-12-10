@@ -18,13 +18,19 @@ const {
   deleteProduct,
   Customers,
   getQueries,
-  respondToQuery
+  respondToQuery,
+  checkEmail,
+  verifyOtp,
+  changePasswordWithOTP
 } = require('../controllers/employeeController');
 const { protectEmployee } = require('../middleware/auth');
 const { uploadInvoice, uploadSingle } = require('../middleware/upload');
 
 // Public routes
 router.post('/login', login);
+router.post('/check-email',checkEmail);
+router.post('/verify-otp',verifyOtp);
+router.post('/change-password',changePasswordWithOTP)
 
 // Protected routes
 router.post('/verify-customer', protectEmployee, verifyCustomer);

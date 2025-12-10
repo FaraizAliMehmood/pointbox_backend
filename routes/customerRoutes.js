@@ -25,7 +25,9 @@ const {
   getCompanyProducts,
   getFAQs,
   getNewsletters,
-  getBrandsBanners
+  verifyOtp,
+  checkEmail,
+  changePasswordWithOTP
 } = require('../controllers/customerController');
 const { protectCustomer } = require('../middleware/auth');
 
@@ -36,6 +38,9 @@ router.get('/banners', getBanners);
 router.get('/brands', getBrands);
 router.get('/conversion-rate', getConversionRate);
 router.post('/contact', submitContact);
+router.post('/check-email',checkEmail);
+router.post('/verify-otp',verifyOtp);
+router.post('/change-password',changePasswordWithOTP);
 
 // Protected routes
 router.get('/profile', protectCustomer, getProfile);

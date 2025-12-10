@@ -32,6 +32,10 @@ app.use('/api/employee', employeeRoutes);
 app.use('/api/customer', customerRoutes);
 app.use('/api/settings', settingsRoutes);
 
+
+
+
+
 // Health check
 app.get('/api/health', (req, res) => {
   res.json({ success: true, message: 'PointBox API is running' });
