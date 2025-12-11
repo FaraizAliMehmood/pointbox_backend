@@ -96,21 +96,9 @@ const customerSchema = new mongoose.Schema({
   otp:{
     type: Number
   },
-  fcmTokens: [{
-    token: {
-      type: String,
-      required: true,
-    },
-    deviceType: {
-      type: String,
-      enum: ['mobile', 'web'],
-      default: 'mobile',
-    },
-    updatedAt: {
-      type: Date,
-      default: Date.now,
-    },
-  }],
+  deviceToken:{
+    type: String
+  }
 }, {
   timestamps: true,
 });

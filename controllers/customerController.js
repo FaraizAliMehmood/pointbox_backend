@@ -85,33 +85,14 @@ exports.login = async (req, res) => {
     if (!customer.isActive) {
       return res.status(401).json({ success: false, message: 'Account is deactivated' });
     }
-      // Validate deviceType
-      if (['mobile', 'web'].includes(deviceType)) {
-        // Check if token already exists
-        const existingTokenIndex = customer.fcmTokens.findIndex(
-          (fcmTokenObj) => fcmTokenObj.token === deviceToken
-        );
-
-        if (existingTokenIndex !== -1) {
-          // Update existing token
-          customer.fcmTokens[existingTokenIndex].deviceType = deviceType;
-          customer.fcmTokens[existingTokenIndex].updatedAt = new Date();
-        } else {
-          // Add new token
-          customer.fcmTokens.push({
-            token: deviceToken,
-            deviceType,
-            updatedAt: new Date(),
-          });
-      }
+    
+    // Save device token if provided
+    if (deviceToken) {
+      customer.deviceToken = deviceToken;
+      await customer.save();
     }
 
     const token = generateToken(customer._id, 'customer');
-
-    // Save customer if FCM token was updated
-    if (deviceToken && deviceType) {
-      await customer.save();
-    }
 
     // Convert to plain object and remove sensitive fields
     const customerData = customer.toObject();
