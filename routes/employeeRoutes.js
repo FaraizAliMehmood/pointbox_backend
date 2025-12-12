@@ -21,7 +21,9 @@ const {
   respondToQuery,
   checkEmail,
   verifyOtp,
-  changePasswordWithOTP
+  changePasswordWithOTP,
+  getNotifications,
+  notifications
 } = require('../controllers/employeeController');
 const { protectEmployee } = require('../middleware/auth');
 const { uploadInvoice, uploadSingle } = require('../middleware/upload');
@@ -31,12 +33,14 @@ router.post('/login', login);
 router.post('/check-email',checkEmail);
 router.post('/verify-otp',verifyOtp);
 router.post('/change-password',changePasswordWithOTP)
+router.post("/notifications",notifications)
 
 // Protected routes
 router.post('/verify-customer', protectEmployee, verifyCustomer);
 router.get('/customers', protectEmployee,Customers);
 router.post('/add-points', protectEmployee, uploadInvoice, addRedeemPoints);
 router.get('/redeem-history', protectEmployee, getRedeemHistory);
+router.get('/notifications', protectEmployee, getNotifications);
 
 // FCM Token routes
 router.post('/fcm-token', protectEmployee, registerFCMToken);

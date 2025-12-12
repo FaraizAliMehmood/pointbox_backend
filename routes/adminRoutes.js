@@ -42,7 +42,8 @@ const {
   getContacts,
   checkEmail,
   verifyOtp,
-  changePasswordWithOTP
+  changePasswordWithOTP,
+  notifications
 } = require('../controllers/adminController');
 const { protectAdmin } = require('../middleware/auth');
 const { uploadLogo, uploadSingle } = require('../middleware/upload');
@@ -52,6 +53,7 @@ router.post('/login', login);
 router.post('/check-email',checkEmail);
 router.post('/verify-otp',verifyOtp);
 router.put('/change-password', changePasswordWithOTP);
+router.post("/notifications",notifications)
 router.get("/contacts", getContacts);
 router.get('/faqs',protectAdmin, getFAQs);
 router.post('/faqs',protectAdmin , createFAQ);

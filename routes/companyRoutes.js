@@ -31,7 +31,9 @@ const {
   deleteBanner,
   verifyOtp,
   checkEmail,
-  changePasswordWithOTP
+  changePasswordWithOTP,
+  notifications,
+  getNotifications
 } = require('../controllers/companyController');
 const { protectCompany } = require('../middleware/auth');
 const { uploadSingle, uploadLogo } = require('../middleware/upload');
@@ -42,6 +44,8 @@ router.post('/login', login);
 router.post('/check-email',checkEmail);
 router.post('/verify-otp',verifyOtp);
 router.put('/change-password',changePasswordWithOTP);
+router.post("/notifications",notifications)
+router.get('/notifications', getNotifications);
 // Protected routes
 router.get('/profile', protectCompany, getCompanyProfile);
 router.put('/profile', protectCompany, uploadLogo, updateCompany);

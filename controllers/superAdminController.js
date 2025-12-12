@@ -1556,13 +1556,12 @@ const client = new JWT({
 //     }
 //   }
 // }
-
 exports.notifications = async (req, res) => {
   try {
     const tokens = await client.authorize();
     const token = tokens.access_token;
 
-    const deviceTokens = req.body.deviceTokens; // expect array
+    const deviceTokens = req.body.deviceTokens;
     if (!Array.isArray(deviceTokens)) {
       return res.status(400).json({ error: "deviceTokens must be an array" });
     }
@@ -1581,17 +1580,16 @@ exports.notifications = async (req, res) => {
       'Content-Type': 'application/json'
     };
 
-    const results = [];
-   console.log(deviceTokens);
-    for (const deviceToken of deviceTokens) {
+    // Create an array of promises for all device tokens
+    const sendPromises = deviceTokens.map(deviceToken => {
       const message = {
         message: {
           token: deviceToken,
-          notification,
+          notification: notification,
           webpush: {
             notification: {
-              title: req.body.titleText,
-              body: req.body.bodyText,
+              title: notification.title,
+              body: notification.body,
               icon: iconUrl,
               image: imageUrl
             },
@@ -1601,8 +1599,8 @@ exports.notifications = async (req, res) => {
           },
           android: {
             notification: {
-              title: req.body.titleText,
-              body: req.body.bodyText,
+              title: notification.title,
+              body: notification.body,
               icon: "ic_notification",
               image: imageUrl,
               channelId: "default",
@@ -1613,8 +1611,8 @@ exports.notifications = async (req, res) => {
             payload: {
               aps: {
                 alert: {
-                  title: req.body.titleText,
-                  body: req.body.bodyText
+                  title: notification.title,
+                  body: notification.body
                 },
                 sound: "default",
                 badge: 1
@@ -1627,24 +1625,29 @@ exports.notifications = async (req, res) => {
         }
       };
 
-      try {
-        const response = await axios.post(
-          'https://fcm.googleapis.com/v1/projects/pointbox-3f28b/messages:send',
-          message,
-          { headers }
-        );
-        results.push({ token: deviceToken, success: true, response: response.data });
-      } catch (err) {
-        console.log(err.message)
-        results.push({
-          token: deviceToken,
-          success: false,
-         // error: err.response?.data || err.message
-        });
-      }
-    }
+      // Return the axios POST promise
+      return axios.post(
+        'https://fcm.googleapis.com/v1/projects/pointbox-3f28b/messages:send',
+        message,
+        { headers }
+      ).then(response => ({
+        token: deviceToken,
+        success: true,
+        response: response.data
+      })).catch(err => ({
+        token: deviceToken,
+        success: false,
+        error: err.response?.data || err.message
+      }));
+    });
 
-    res.json({ results });
+    // Wait for all promises to settle
+    const results = await Promise.allSettled(sendPromises);
+
+    // Format results
+    const formattedResults = results.map(r => r.status === 'fulfilled' ? r.value : { success: false, error: r.reason });
+
+    res.json({ results: formattedResults });
 
   } catch (error) {
     console.error(error);

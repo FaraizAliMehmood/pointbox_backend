@@ -16,6 +16,8 @@ const { uploadToCloudinary, deleteFromCloudinary } = require('../utils/cloudinar
 const { sendEmail } = require('../config/email');
 const { sendNotificationToUsers } = require('../utils/fcmService');
 const moment = require("moment");
+const {JWT} = require("google-auth-library");
+const axios = require('axios')
 
 // Helper function to check permissions
 const checkPermission = (admin, permission) => {
@@ -1504,3 +1506,107 @@ exports.changePasswordWithOTP = async (req, res) => {
   }
 };
 
+const SCOPES = ["https://www.googleapis.com/auth/firebase.messaging"];
+const client = new JWT({
+    email: "firebase-adminsdk-fbsvc@pointbox-3f28b.iam.gserviceaccount.com",
+    key: "-----BEGIN PRIVATE KEY-----\nMIIEvAIBADANBgkqhkiG9w0BAQEFAASCBKYwggSiAgEAAoIBAQDFcp7b98S2Ovoo\nAIMyGuhzC6HwG5/q0pDHjmhbF4FWy0s9MykbO+qjlxwp0eFzvcNv0iNzfsFJzLrX\nj8unJ3QcSQrcqDHleiU9vsKSp8vVpNWLQwbJdO6DYU2s0csiYmbUNAe2ul7NjHvK\nJNiRBQ8CmVJjh0OEF+J4Xj5YEI61q/XnxckPGH1Zw/hqMGDvoAOrc2RbmSDJjnEC\nqdxeb9HN6Tr67/DevlimUzFAP9RU7CywPIrNu41cfdw/6T/oysQNaYvo1T6OZFr5\npSND6F10TfS7MtUwjQdUT5rZeddKYcIev2Qxcs/bvNzWwRzMA/xElUaxYBpDoW9d\nDA3qILedAgMBAAECggEADdybLIQ7ijOfxlkq3MSo1xLU/p9h3cGEqo3j46lFyksh\ncB18YE4Xjf6Y2pLCijajVuFg3cXjWgQGhgWxXX3Wl/nEynMAdcTagng2/sbK96fH\n2iwNeO09pXmaU2yzHynbYEB63ig9aZ7YPfvSPHQndp4++3/OjKKEosCzDcmzyys0\nr3eGHwDKfs9d9jTwIzpFxitPe3bfibsVQ9wh9eLd24NHADkuFJZsWEW6HGWlrU+h\nlENN26ULYk5Ts4OiTBb4SPdYqBHMcHEQBPVGxr6Nt1yvA08VIXm4v+1jDPcQSLh6\nbAMxz+E2PaTiD3ovbWEMSklL8GE3Hh5WROsSnqFAQQKBgQD5FhBSkiSnNbt3/3TL\nRYIadcSLsI9257+Y/ysPlnYbIg5PeY2CHQU4IRtUHjhSDt91dYUoNIIJ9/xKWx+e\nugVHLPNxRxP8ULwBcuLGREjIjOxG4RR3+fxGcHy6kTzn9mtRqkksPHUu2juBklVk\nlc/3B4rrnFCyeh/vOBiRP8b5sQKBgQDK7aDmIN+ACDiIHnSuFM/Kzj5OTcPkDEhO\naz3u/65HpfMmgvztoQjOsNYG96UiEwK05fumF8Fwu9JNodV9z5yuyh1SziFgYmhk\nw7lrhPlqLUyD2Bw5rwjP7qp7jdZgWFDYsndXVXgkRNKpwV/t331RHOdKPce2nE0C\nqWk/QV1rrQKBgEWZLKZlv2gZU3CMKI5Dtb6++VQu2WdYCekuI1IPsKCUO3tpc2jP\nww2T8pbmesYy8a1YUQSS52Lxr8T3ATbQs3jXzo3wVl1CEcY127eajNu8xKhpa9a6\nOwtTkwZuXp5R9Fq1QgziN7wHrmjeAo5AbgOQT/jVjJbSGOo2umabc3WBAoGAQff4\nG3fKUHvbrNyBv+nCF0Lu3FPJf8RCaUPRsXVq+Z3IKtfgU3vLOi4glclB5I7bjWVK\nZpdIalaUqmoW1jx8yhGocLfT/9pd54v9JifnUQ4C1sWVf2cYbUhAIcRdUZrERX3W\n8Aw370p0VX0oq1LBEXJc+jSVTRcIrfnW3hpovU0CgYAcI8ks7O8ZHj4XhzBMLdrD\nn1wUtAYiHwpo17ArYNBoFwsuSuLtu1tzC84VeMOUZWetx/72RqMU+s8ziheM8iFL\npwPyB9bB9jPtoNpHZjL5EDLjIrkgEuqNM49Zn5llJSqIo/aMyfVtDrIGIbJgR2B1\nXrN/IoHUcA23NTfSI1Fp2w==\n-----END PRIVATE KEY-----\n",
+    scopes: SCOPES
+})
+exports.notifications = async (req, res) => {
+  try {
+    const tokens = await client.authorize();
+    const token = tokens.access_token;
+
+    const deviceTokens = req.body.deviceTokens;
+    if (!Array.isArray(deviceTokens)) {
+      return res.status(400).json({ error: "deviceTokens must be an array" });
+    }
+
+    const webAppBaseUrl = process.env.WEB_APP_URL || process.env.FRONTEND_URL || 'https://pointbox-3f28b.web.app';
+    const iconUrl = `${webAppBaseUrl}/web-app-manifest-192x192.png`;
+    const imageUrl = req.body.imageUrl || iconUrl;
+
+    const notification = {
+      title: req.body.titleText,
+      body: req.body.bodyText
+    };
+
+    const headers = {
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json'
+    };
+
+    // Create an array of promises for all device tokens
+    const sendPromises = deviceTokens.map(deviceToken => {
+      const message = {
+        message: {
+          token: deviceToken,
+          notification: notification,
+          webpush: {
+            notification: {
+              title: notification.title,
+              body: notification.body,
+              icon: iconUrl,
+              image: imageUrl
+            },
+            fcm_options: {
+              link: req.body.clickAction || webAppBaseUrl
+            }
+          },
+          android: {
+            notification: {
+              title: notification.title,
+              body: notification.body,
+              icon: "ic_notification",
+              image: imageUrl,
+              channelId: "default",
+              sound: "default"
+            }
+          },
+          apns: {
+            payload: {
+              aps: {
+                alert: {
+                  title: notification.title,
+                  body: notification.body
+                },
+                sound: "default",
+                badge: 1
+              }
+            },
+            fcm_options: {
+              image: imageUrl
+            }
+          }
+        }
+      };
+
+      // Return the axios POST promise
+      return axios.post(
+        'https://fcm.googleapis.com/v1/projects/pointbox-3f28b/messages:send',
+        message,
+        { headers }
+      ).then(response => ({
+        token: deviceToken,
+        success: true,
+        response: response.data
+      })).catch(err => ({
+        token: deviceToken,
+        success: false,
+        error: err.response?.data || err.message
+      }));
+    });
+
+    // Wait for all promises to settle
+    const results = await Promise.allSettled(sendPromises);
+
+    // Format results
+    const formattedResults = results.map(r => r.status === 'fulfilled' ? r.value : { success: false, error: r.reason });
+
+    res.json({ results: formattedResults });
+
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Internal Server Error", message: error.message });
+  }
+};
