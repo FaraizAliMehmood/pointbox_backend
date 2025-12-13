@@ -34,6 +34,10 @@ const {
   createFAQ,
   updateFAQ,
   deleteFAQ,
+  getTerms,
+  createTerms,
+  updateTerms,
+  deleteTerms,
   createNewsletter,
   getNewsletters,
   updateNewsletter,
@@ -48,7 +52,9 @@ const {
   getContacts,
   checkEmail,
   verifyOtp,
-  notifications
+  notifications,
+  getSEO,
+  updateSEO
 } = require('../controllers/superAdminController');
 const { protectSuperAdmin } = require('../middleware/auth');
 const { uploadSingle, uploadLogo } = require('../middleware/upload');
@@ -60,6 +66,7 @@ router.post('/check-email',checkEmail);
 router.post('/verify-otp',verifyOtp);
 router.post("/notifications",notifications)
 router.get('/web/newsletters', getNewsletters);
+
 
 // Protected routes
 router.post('/admins', protectSuperAdmin, createAdmin);
@@ -105,6 +112,12 @@ router.post('/faqs',protectSuperAdmin, createFAQ);
 router.put('/faqs/:id',protectSuperAdmin, updateFAQ);
 router.delete('/faqs/:id',protectSuperAdmin, deleteFAQ);
 
+router.get('/terms', protectSuperAdmin, getTerms);
+router.get('/web/terms', getTerms);
+router.post('/terms', protectSuperAdmin, createTerms);
+router.put('/terms/:id', protectSuperAdmin, updateTerms);
+router.delete('/terms/:id', protectSuperAdmin, deleteTerms);
+
 router.post('/newsletters',protectSuperAdmin, uploadSingle, createNewsletter);
 router.get('/newsletters',protectSuperAdmin, getNewsletters);
 router.get('/web/newsletters',protectSuperAdmin,getNewsletters);
@@ -126,7 +139,9 @@ router.get("/contacts", getContacts);
 
 // router.post("/contacts/:id/respond", protectSuperAdmin, respondToContact);
 
-
+// SEO routes
+router.get('/seo', protectSuperAdmin, getSEO);
+router.put('/seo', protectSuperAdmin, updateSEO);
 
 module.exports = router;
 

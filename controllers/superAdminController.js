@@ -9,8 +9,10 @@ const Banner = require('../models/Banner');
 const Query = require('../models/Query');
 const Notification = require('../models/Notification');
 const FAQ = require('../models/FAQ');
+const Terms = require('../models/Terms');
 const NewsLetters = require('../models/NewsLetters');
 const NewsLetterEmails = require('../models/NewsLetterEmails');
+const SEO = require('../models/SEO');
 const bcrypt = require('bcryptjs');
 const { generateToken } = require('../middleware/auth');
 const { uploadToCloudinary, deleteFromCloudinary } = require('../utils/cloudinaryUpload');
@@ -1047,6 +1049,93 @@ exports.deleteFAQ = async (req, res) => {
   }
 };
 
+// @desc    Get all Terms and Conditions
+// @route   GET /api/superadmin/terms
+// @access  Private (Super Admin)
+exports.getTerms = async (req, res) => {
+  try {
+    const terms = await Terms.find().sort({ createdAt: -1 });
+    res.json({ success: true, data: terms });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// @desc    Create Terms and Conditions
+// @route   POST /api/superadmin/terms
+// @access  Private (Super Admin)
+exports.createTerms = async (req, res) => {
+  try {
+    const { title, content, section, isActive } = req.body;
+
+    if (!title || !content) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Title and content are required' 
+      });
+    }
+
+    const terms = await Terms.create({
+      title: title.trim(),
+      content: content.trim(),
+      section: section || 'general',
+      isActive: isActive !== undefined ? isActive : true,
+      createdBy: req.user._id,
+      createdByModel: 'SuperAdmin',
+    });
+
+    res.status(201).json({
+      success: true,
+      data: terms,
+    });
+  } catch (error) {
+    res.status(400).json({ success: false, message: error.message });
+  }
+};
+
+// @desc    Update Terms and Conditions
+// @route   PUT /api/superadmin/terms/:id
+// @access  Private (Super Admin)
+exports.updateTerms = async (req, res) => {
+  try {
+    const { title, content, section, isActive } = req.body;
+
+    const terms = await Terms.findById(req.params.id);
+
+    if (!terms) {
+      return res.status(404).json({ success: false, message: 'Terms and Conditions not found' });
+    }
+
+    if (title !== undefined) terms.title = title.trim();
+    if (content !== undefined) terms.content = content.trim();
+    if (section !== undefined) terms.section = section;
+    if (isActive !== undefined) terms.isActive = isActive;
+
+    await terms.save();
+
+    res.json({ success: true, data: terms });
+  } catch (error) {
+    res.status(400).json({ success: false, message: error.message });
+  }
+};
+
+// @desc    Delete Terms and Conditions
+// @route   DELETE /api/superadmin/terms/:id
+// @access  Private (Super Admin)
+exports.deleteTerms = async (req, res) => {
+  try {
+    const terms = await Terms.findByIdAndDelete(req.params.id);
+
+    if (!terms) {
+      return res.status(404).json({ success: false, message: 'Terms and Conditions not found' });
+    }
+
+    res.json({ success: true, message: 'Terms and Conditions deleted successfully' });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
 // @desc    Create Newsletter
 // @route   POST /api/superadmin/newsletters
 // @access  Private (Super Admin)
@@ -1652,5 +1741,62 @@ exports.notifications = async (req, res) => {
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: "Internal Server Error", message: error.message });
+  }
+};
+
+// @desc    Get SEO settings
+// @route   GET /api/superadmin/seo
+// @access  Private (Super Admin)
+exports.getSEO = async (req, res) => {
+  try {
+    const seo = await SEO.getSEO();
+    res.json({ 
+      success: true, 
+      data: {
+        metaTitle: seo.metaTitle || '',
+        metaDescription: seo.metaDescription || '',
+        metaKeywords: seo.metaKeywords || '',
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// @desc    Update SEO settings
+// @route   PUT /api/superadmin/seo
+// @access  Private (Super Admin)
+exports.updateSEO = async (req, res) => {
+  try {
+    const { metaTitle, metaDescription, metaKeywords } = req.body;
+
+    // Get or create SEO document
+    let seo = await SEO.findOne();
+    if (!seo) {
+      seo = await SEO.create({
+        metaTitle: metaTitle || '',
+        metaDescription: metaDescription || '',
+        metaKeywords: metaKeywords || '',
+      });
+    } else {
+      // Update only the provided fields
+      if (metaTitle !== undefined) seo.metaTitle = metaTitle;
+      if (metaDescription !== undefined) seo.metaDescription = metaDescription;
+      if (metaKeywords !== undefined) seo.metaKeywords = metaKeywords;
+      
+      await seo.save();
+    }
+
+    res.json({ 
+      success: true, 
+      data: {
+        metaTitle: seo.metaTitle || '',
+        metaDescription: seo.metaDescription || '',
+        metaKeywords: seo.metaKeywords || '',
+      },
+      message: 'SEO settings updated successfully'
+    });
+  } catch (error) {
+    res.status(400).json({ success: false, message: error.message });
   }
 };

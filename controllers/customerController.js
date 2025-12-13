@@ -14,6 +14,8 @@ const FAQ = require('../models/FAQ');
 const Notification = require('../models/Notification');
 const NewsLetterEmails = require('../models/NewsLetterEmails');
 const moment = require("moment");
+const Terms = require('../models/Terms');
+const SEO = require('../models/SEO');
 
 exports.signup = async (req, res) => {
   try {
@@ -910,5 +912,30 @@ exports.changePasswordWithOTP = async (req, res) => {
       success: false, 
       message: 'Internal server error' 
     });
+  }
+};
+
+exports.getTerms = async (req, res) => {
+  try {
+    const terms = await Terms.find().sort({ createdAt: -1 });
+    res.json({ success: true, data: terms });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+exports.getSEO = async (req, res) => {
+  try {
+    const seo = await SEO.getSEO();
+    res.json({ 
+      success: true, 
+      data: {
+        metaTitle: seo.metaTitle || '',
+        metaDescription: seo.metaDescription || '',
+        metaKeywords: seo.metaKeywords || '',
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
   }
 };

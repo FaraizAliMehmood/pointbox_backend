@@ -5,6 +5,10 @@ const {
   getSettings,
   updateSettings,
 } = require('../controllers/settingsController');
+const {
+  getSEO,
+  updateSEO,
+} = require('../controllers/superAdminController');
 const { protectSuperAdmin } = require('../middleware/auth');
 const { uploadLogo: uploadLogoMiddleware } = require('../middleware/upload');
 
@@ -14,6 +18,9 @@ router.get('/', protectSuperAdmin, getSettings);
 router.get("/web",getSettings);
 router.put('/', protectSuperAdmin, updateSettings);
 
+// SEO routes
+router.get('/seo', protectSuperAdmin, getSEO);
+router.put('/seo', protectSuperAdmin, updateSEO);
 
 module.exports = router;
 

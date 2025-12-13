@@ -27,7 +27,9 @@ const {
   getNewsletters,
   verifyOtp,
   checkEmail,
-  changePasswordWithOTP
+  changePasswordWithOTP,
+  getTerms,
+  getSEO
 } = require('../controllers/customerController');
 const { protectCustomer } = require('../middleware/auth');
 
@@ -67,6 +69,8 @@ router.post('/web/products', getCompanyProducts);
 router.get('/web/faqs', getFAQs);
 router.get('/web/newsletters', getNewsletters);
 router.get('/web/banners', getBanners);
+router.get('/web/terms',getTerms);
+router.get('/web/seo',getSEO);
 
 module.exports = router;
 
