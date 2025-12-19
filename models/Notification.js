@@ -48,6 +48,10 @@ const notificationSchema = new mongoose.Schema({
   sentAt: {
     type: Date,
   },
+  data: {
+    type: mongoose.Schema.Types.Mixed,
+    default: null,
+  },
 }, {
   timestamps: true,
 });

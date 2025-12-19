@@ -12,6 +12,8 @@ const companyRoutes = require('./routes/companyRoutes');
 const employeeRoutes = require('./routes/employeeRoutes');
 const customerRoutes = require('./routes/customerRoutes');
 const settingsRoutes = require('./routes/settingsRoutes');
+const reviewRoutes = require('./routes/reviewRoutes');
+const notificationRoutes = require('./routes/notificationRoutes');
 
 // Connect to database
 connectDB();
@@ -31,6 +33,8 @@ app.use('/api/company', companyRoutes);
 app.use('/api/employee', employeeRoutes);
 app.use('/api/customer', customerRoutes);
 app.use('/api/settings', settingsRoutes);
+app.use('/api/review', reviewRoutes);
+app.use('/api/notification', notificationRoutes);
 
 
 
