@@ -31,11 +31,27 @@ exports.signup = async (req, res) => {
   try {
     const { username, email, password, phone, address, country } = req.body;
 
-    const customer = await Customer.findOne({email})
-   if(customer){
-    return  res.status(400).json({ success: false, message: "Customer with this email already exist." });
-   }else{
-    const hashedPassword = await bcrypt.hash(password,10)
+    // Check if customer with this email already exists
+    const existingCustomerByEmail = await Customer.findOne({ email });
+    if (existingCustomerByEmail) {
+      return res.status(400).json({ 
+        success: false, 
+        message: "Customer with this email already exists." 
+      });
+    }
+
+    // Check if customer with this phone number already exists
+    if (phone) {
+      const existingCustomerByPhone = await Customer.findOne({ phone });
+      if (existingCustomerByPhone) {
+        return res.status(400).json({ 
+          success: false, 
+          message: "Customer with this phone number already exists." 
+        });
+      }
+    }
+
+    const hashedPassword = await bcrypt.hash(password, 10);
     const customer = await Customer.create({
       username,
       email,
@@ -47,20 +63,29 @@ exports.signup = async (req, res) => {
     });
 
     const otp = generateOTP();
-    const response =  await sendEmail(
-       req.body.email,
-       "Otp verification",
+    const response = await sendEmail(
+      req.body.email,
+      "Otp verification",
       `Your otp code is ${otp} and do remember otp will expire after 10 minutes.`
     );
-         if(response){
-          const Data = await Customer.findByIdAndUpdate(
-            {_id: customer._id},
-            {$set: {otp: otp}},
-             {new: true});
-    res.status(201).json({success: true,message: "Please check your email.", id: customer._id})
-         }  
-  }
+    if (response) {
+      const Data = await Customer.findByIdAndUpdate(
+        { _id: customer._id },
+        { $set: { otp: otp } },
+        { new: true }
+      );
+      res.status(201).json({ success: true, message: "Please check your email." });
+    }
   } catch (error) {
+    // Handle MongoDB duplicate key error
+    if (error.code === 11000) {
+      const field = Object.keys(error.keyPattern)[0];
+      const fieldName = field === 'phone' ? 'phone number' : field;
+      return res.status(400).json({ 
+        success: false, 
+        message: `Customer with this ${fieldName} already exists.` 
+      });
+    }
     res.status(400).json({ success: false, message: error.message });
   }
 };
@@ -868,6 +893,31 @@ exports.verifyOtp = async(req,res)=>{
      return res.status(500).json({success:false, message: "Internal server error"})
   }
 };
+
+exports.verifyPassOtp = async(req,res)=>{
+  try {
+      let user = await Customer.findOne({otp: req.body.otp});
+      if(!user){
+        return res.status(400).json({success:false, message: "Code not found"})
+      }else{
+         
+         const isExpired = isOTPExpired(user.updatedAt);
+          if(isExpired){
+               res.status(400).json({success:false, message: "Your otp is expired"})
+          }else{
+              const Data = await Customer.findByIdAndUpdate(
+                  {_id: user._id},
+                  {$set: {otp: 0}},
+                  {new: true}).select("-password");
+     res.status(200).json({success: true, message:"account verified successfully", email: Data.email});
+          }
+          }
+      }catch (error) {
+    console.log(error.message);
+     return res.status(500).json({success:false, message: "Internal server error"})
+  }
+};
+
 exports.changePasswordWithOTP = async (req, res) => {
   try {
     const { email, newPassword } = req.body;

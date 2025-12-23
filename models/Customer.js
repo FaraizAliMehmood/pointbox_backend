@@ -16,10 +16,7 @@ const customerSchema = new mongoose.Schema({
     select: false,
   },
   phone: {
-    type: String,
-    required: [true, 'Phone number is required'],
-    unique: true,
-    trim: true,
+    type: String
   },
   address: {
     type: String,

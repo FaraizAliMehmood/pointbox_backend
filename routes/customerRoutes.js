@@ -29,7 +29,8 @@ const {
   checkEmail,
   changePasswordWithOTP,
   getTerms,
-  getSEO
+  getSEO,
+  verifyPassOtp
 } = require('../controllers/customerController');
 const { protectCustomer } = require('../middleware/auth');
 
@@ -42,6 +43,7 @@ router.get('/conversion-rate', getConversionRate);
 router.post('/contact', submitContact);
 router.post('/check-email',checkEmail);
 router.post('/verify-otp',verifyOtp);
+router.post('/verifyPass-otp',verifyPassOtp);
 router.post('/change-password',changePasswordWithOTP);
 
 // Protected routes
