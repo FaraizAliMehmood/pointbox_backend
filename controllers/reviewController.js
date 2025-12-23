@@ -7,7 +7,7 @@ const Customer = require('../models/Customer');
 exports.createReview = async (req, res) => {
   try {
     const { userId, ratings, review } = req.body;
-
+    console.log(req.body);
     // Validation
     if (!userId || !ratings || !review) {
       return res.status(400).json({

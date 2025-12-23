@@ -17,6 +17,16 @@ const moment = require("moment");
 const Terms = require('../models/Terms');
 const SEO = require('../models/SEO');
 
+function generateOTP() {
+  const otp = Math.floor(1000 + Math.random() * 9000);
+  return otp.toString();
+}
+//check otp expiration
+function isOTPExpired(createdAt){
+    const expirationTime = moment(createdAt).add(10,"minutes")
+    return moment()>expirationTime;
+}
+
 exports.signup = async (req, res) => {
   try {
     const { username, email, password, phone, address, country } = req.body;
@@ -36,17 +46,19 @@ exports.signup = async (req, res) => {
       isGoogleSignup: false,
     });
 
-    const token = generateToken(customer._id, 'customer');
-
-    res.status(201).json({
-      success: true,
-      token,
-      user: {
-        id: customer._id,
-        username: customer.username,
-        email: customer.email,
-      },
-    });
+    const otp = generateOTP();
+    const response =  await sendEmail(
+       req.body.email,
+       "Otp verification",
+      `Your otp code is ${otp} and do remember otp will expire after 10 minutes.`
+    );
+         if(response){
+          const Data = await Customer.findByIdAndUpdate(
+            {_id: customer._id},
+            {$set: {otp: otp}},
+             {new: true});
+    res.status(201).json({success: true,message: "Please check your email.", id: customer._id})
+         }  
   }
   } catch (error) {
     res.status(400).json({ success: false, message: error.message });
