@@ -55,26 +55,15 @@ exports.createReview = async (req, res) => {
 // @access  Public
 exports.getReviews = async (req, res) => {
   try {
-    const { page = 1, limit = 20 } = req.query;
-    const skip = (page - 1) * limit;
-
-    const reviews = await Review.find({ isActive: true })
+    const reviews = await Review.find()
       .populate('userId', 'username email')
       .sort({ createdAt: -1 })
-      .skip(skip)
-      .limit(parseInt(limit));
 
     const total = await Review.countDocuments({ isActive: true });
 
-    res.json({
+    res.status(200).json({
       success: true,
-      data: reviews,
-      pagination: {
-        page: parseInt(page),
-        limit: parseInt(limit),
-        total,
-        pages: Math.ceil(total / limit),
-      },
+      data: reviews
     });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
