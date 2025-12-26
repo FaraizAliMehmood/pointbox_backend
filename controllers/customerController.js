@@ -124,6 +124,14 @@ exports.login = async (req, res) => {
     if (!customer.isActive) {
       return res.status(401).json({ success: false, message: 'Account is deactivated' });
     }
+
+    // Check if email is verified
+    if (!customer.emailVerified) {
+      return res.status(401).json({ 
+        success: false, 
+        message: 'Please verify your email before logging in. Check your email for the verification code.' 
+      });
+    }
     
     // Save device token if provided
     if (deviceToken) {
@@ -883,9 +891,9 @@ exports.verifyOtp = async(req,res)=>{
           }else{
               const Data = await Customer.findByIdAndUpdate(
                   {_id: user._id},
-                  {$set: {otp: 0}},
+                  {$set: {otp: 0, emailVerified: true}},
                   {new: true}).select("-password");
-     res.status(200).json({success: true, message:"account verified successfully"});
+     res.status(200).json({success: true, message:"account verified successfully", email: Data.email});
           }
           }
       }catch (error) {

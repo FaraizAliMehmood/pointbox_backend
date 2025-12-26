@@ -95,6 +95,10 @@ const customerSchema = new mongoose.Schema({
   },
   deviceToken:{
     type: String
+  },
+  emailVerified:{
+    type: Boolean,
+    default: false
   }
 }, {
   timestamps: true,
