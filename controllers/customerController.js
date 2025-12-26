@@ -26,7 +26,6 @@ function isOTPExpired(createdAt){
     const expirationTime = moment(createdAt).add(10,"minutes")
     return moment()>expirationTime;
 }
-
 exports.signup = async (req, res) => {
   try {
     const { username, email, password, phone, address, country } = req.body;
