@@ -20,6 +20,11 @@ const whatsNewSchema = new mongoose.Schema({
   productUrl: {
     type: String,
   },
+  language: {
+    type: String,
+    enum: ['en', 'ar'],
+    default: 'en',
+  },
   order: {
     type: Number,
     default: 0,

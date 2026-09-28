@@ -1020,6 +1020,7 @@ exports.uploadWhatsNew = async (req, res) => {
       imageUrl: imageUrl,
       public_id: publicId,
       productUrl: req.body.productUrl,
+      language: req.body.language || 'en',
       order: req.body.order,
       createdBy: req.user._id,
     });
@@ -1073,11 +1074,12 @@ exports.updateWhatsNew = async (req, res) => {
       }
     }
 
-    const { title, description, productUrl, order, isActive } = req.body;
+    const { title, description, productUrl, language, order, isActive } = req.body;
 
     if (title !== undefined) whatsNew.title = title;
     if (description !== undefined) whatsNew.description = description;
     if (productUrl !== undefined) whatsNew.productUrl = productUrl;
+    if (language !== undefined) whatsNew.language = language;
     if (order !== undefined) whatsNew.order = order;
     if (isActive !== undefined) whatsNew.isActive = isActive;
 
