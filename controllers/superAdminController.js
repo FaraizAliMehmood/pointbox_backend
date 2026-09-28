@@ -6,6 +6,7 @@ const Employee = require('../models/Employee');
 const Customer = require('../models/Customer');
 const Transaction = require('../models/Transaction');
 const Banner = require('../models/Banner');
+const WhatsNew = require('../models/WhatsNew');
 const Query = require('../models/Query');
 const Notification = require('../models/Notification');
 const FAQ = require('../models/FAQ');
@@ -985,6 +986,131 @@ exports.deleteBanner = async (req, res) => {
     await banner.deleteOne();
 
     res.json({ success: true, message: 'Banner deleted successfully' });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// @desc    Upload What's New item
+// @route   POST /api/superadmin/whats-new
+// @access  Private (Super Admin)
+exports.uploadWhatsNew = async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ success: false, message: 'Please upload an image' });
+    }
+
+    let imageUrl = '';
+    let publicId = '';
+
+    try {
+      const result = await uploadToCloudinary(req.file.buffer, 'whats-new');
+      imageUrl = result.secure_url;
+      publicId = result.public_id;
+    } catch (uploadError) {
+      return res.status(400).json({
+        success: false,
+        message: `Failed to upload image: ${uploadError.message}`,
+      });
+    }
+
+    const whatsNew = await WhatsNew.create({
+      title: req.body.title,
+      description: req.body.description,
+      imageUrl: imageUrl,
+      public_id: publicId,
+      productUrl: req.body.productUrl,
+      order: req.body.order,
+      createdBy: req.user._id,
+    });
+
+    res.status(201).json({
+      success: true,
+      data: whatsNew,
+    });
+  } catch (error) {
+    res.status(400).json({ success: false, message: error.message });
+  }
+};
+
+// @desc    Get all What's New items
+// @route   GET /api/superadmin/whats-new
+// @access  Private (Super Admin)
+exports.getWhatsNews = async (req, res) => {
+  try {
+    const whatsNews = await WhatsNew.find().sort({ order: 1, createdAt: -1 });
+    res.json({ success: true, data: whatsNews });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// @desc    Update What's New item
+// @route   PUT /api/superadmin/whats-new/:id
+// @access  Private (Super Admin)
+exports.updateWhatsNew = async (req, res) => {
+  try {
+    const whatsNew = await WhatsNew.findById(req.params.id);
+
+    if (!whatsNew) {
+      return res.status(404).json({ success: false, message: "What's New item not found" });
+    }
+
+    if (req.file) {
+      try {
+        if (whatsNew.public_id) {
+          await deleteFromCloudinary(whatsNew.public_id);
+        }
+
+        const result = await uploadToCloudinary(req.file.buffer, 'whats-new');
+        whatsNew.imageUrl = result.secure_url;
+        whatsNew.public_id = result.public_id;
+      } catch (uploadError) {
+        return res.status(400).json({
+          success: false,
+          message: `Failed to upload image: ${uploadError.message}`,
+        });
+      }
+    }
+
+    const { title, description, productUrl, order, isActive } = req.body;
+
+    if (title !== undefined) whatsNew.title = title;
+    if (description !== undefined) whatsNew.description = description;
+    if (productUrl !== undefined) whatsNew.productUrl = productUrl;
+    if (order !== undefined) whatsNew.order = order;
+    if (isActive !== undefined) whatsNew.isActive = isActive;
+
+    await whatsNew.save();
+
+    res.json({ success: true, data: whatsNew });
+  } catch (error) {
+    res.status(400).json({ success: false, message: error.message });
+  }
+};
+
+// @desc    Delete What's New item
+// @route   DELETE /api/superadmin/whats-new/:id
+// @access  Private (Super Admin)
+exports.deleteWhatsNew = async (req, res) => {
+  try {
+    const whatsNew = await WhatsNew.findById(req.params.id);
+
+    if (!whatsNew) {
+      return res.status(404).json({ success: false, message: "What's New item not found" });
+    }
+
+    if (whatsNew.public_id) {
+      try {
+        await deleteFromCloudinary(whatsNew.public_id);
+      } catch (deleteError) {
+        console.error('Error deleting image from Cloudinary:', deleteError);
+      }
+    }
+
+    await whatsNew.deleteOne();
+
+    res.json({ success: true, message: "What's New item deleted successfully" });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }

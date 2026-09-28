@@ -31,6 +31,10 @@ const {
   getBanners,
   updateBanner,
   deleteBanner,
+  uploadWhatsNew,
+  getWhatsNews,
+  updateWhatsNew,
+  deleteWhatsNew,
   getFAQs,
   createFAQ,
   updateFAQ,
@@ -113,6 +117,12 @@ router.get('/banners', protectSuperAdmin, getBanners);
 router.get('/web/banners', getBanners);
 router.put('/banners/:id', protectSuperAdmin, uploadSingle, updateBanner);
 router.delete('/banners/:id', protectSuperAdmin, deleteBanner);
+
+router.post('/whats-new', protectSuperAdmin, uploadSingle, uploadWhatsNew);
+router.get('/whats-new', protectSuperAdmin, getWhatsNews);
+router.get('/web/whats-new', getWhatsNews);
+router.put('/whats-new/:id', protectSuperAdmin, uploadSingle, updateWhatsNew);
+router.delete('/whats-new/:id', protectSuperAdmin, deleteWhatsNew);
 
 router.get('/faqs',protectSuperAdmin, getFAQs);
 router.get('/web/faqs', getFAQs);

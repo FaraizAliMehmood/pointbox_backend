@@ -4,6 +4,7 @@ const Transaction = require('../models/Transaction');
 const Product = require('../models/Product');
 const Settings = require('../models/Settings');
 const Banner = require('../models/Banner');
+const WhatsNew = require('../models/WhatsNew');
 const Query = require('../models/Query');
 const Contact = require('../models/Contact');
 const Company = require('../models/Company');
@@ -206,6 +207,7 @@ exports.getProfile = async (req, res) => {
         ? {
             id: currentTier._id,
             name: currentTier.name,
+            color: currentTier.color,
             minPoints: currentTier.minPoints,
             maxPoints: currentTier.maxPoints ?? null,
             expiryMonths: currentTier.expiryMonths ?? null,
@@ -464,6 +466,18 @@ exports.getBanners = async (req, res) => {
     });
 
     res.json({ success: true, data: filteredBanners });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// @desc    Get What's New items
+// @route   GET /api/customer/whats-new
+// @access  Public
+exports.getWhatsNews = async (req, res) => {
+  try {
+    const whatsNews = await WhatsNew.find({ isActive: true }).sort({ order: 1, createdAt: -1 });
+    res.json({ success: true, data: whatsNews });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
