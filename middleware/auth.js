@@ -46,6 +46,7 @@ const protectSuperAdmin = async (req, res, next) => {
   }
 };
 
+
 // Protect routes - Admin
 const protectAdmin = async (req, res, next) => {
   try {
@@ -192,6 +193,6 @@ module.exports = {
   protectAdmin,
   protectCompany,
   protectEmployee,
-  protectCustomer,
+  protectCustomer
 };
 

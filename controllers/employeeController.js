@@ -513,6 +513,7 @@ exports.uploadBanner = async (req, res) => {
       endDate: req.body.endDate,
       points: req.body.points,
       type: req.body.type || 'regular',
+      language: req.body.language || 'en',
       isActive: req.body.isActive !== undefined ? req.body.isActive === 'true' : true,
       createdBy: companyId,
       createdByModel: 'Company',
@@ -582,6 +583,7 @@ exports.updateBanner = async (req, res) => {
     if (req.body.startDate !== undefined) banner.startDate = req.body.startDate;
     if (req.body.endDate !== undefined) banner.endDate = req.body.endDate;
     if (req.body.type !== undefined) banner.type = req.body.type;
+    if (req.body.language !== undefined) banner.language = req.body.language;
 
     if (req.body.isActive !== undefined) banner.isActive = req.body.isActive === 'true' || req.body.isActive === true;
 

@@ -31,6 +31,11 @@ endDate:{
     enum: ['regular','special_event'],
     default: 'regular',
   },
+  language: {
+    type: String,
+    enum: ['en', 'ar'],
+    default: 'en',
+  },
   isActive: {
     type: Boolean,
     default: true,

@@ -14,6 +14,7 @@ const {
   getCompanies,
   updateCompany,
   toggleCompanyStatus,
+  toggleCompanyAiAccess,
   deleteCompany,
   getQueries,
   respondToQuery,
@@ -54,7 +55,13 @@ const {
   verifyOtp,
   notifications,
   getSEO,
-  updateSEO
+  updateSEO,
+  createAiApiKey,
+  getAiApiKeys,
+  getAiApiKeyById,
+  updateAiApiKey,
+  toggleAiApiKeyStatus,
+  deleteAiApiKey
 } = require('../controllers/superAdminController');
 const { protectSuperAdmin } = require('../middleware/auth');
 const { uploadSingle, uploadLogo } = require('../middleware/upload');
@@ -83,6 +90,7 @@ router.get('/companies', protectSuperAdmin, getCompanies);
 router.get('/web/companies', getCompanies);
 router.put('/companies/:id', protectSuperAdmin, uploadLogo, updateCompany);
 router.put('/companies/:id/status', protectSuperAdmin, toggleCompanyStatus);
+router.put('/companies/:id/ai-access', protectSuperAdmin, toggleCompanyAiAccess);
 router.delete('/companies/:id', protectSuperAdmin, deleteCompany);
 
 router.get('/queries', protectSuperAdmin, getQueries);
@@ -142,6 +150,14 @@ router.get("/contacts", getContacts);
 // SEO routes
 router.get('/seo', protectSuperAdmin, getSEO);
 router.put('/seo', protectSuperAdmin, updateSEO);
+
+// AI API Key routes
+router.post('/ai-api-keys', protectSuperAdmin, createAiApiKey);
+router.get('/ai-api-keys', protectSuperAdmin, getAiApiKeys);
+router.get('/ai-api-keys/:id', protectSuperAdmin, getAiApiKeyById);
+router.put('/ai-api-keys/:id', protectSuperAdmin, updateAiApiKey);
+router.put('/ai-api-keys/:id/status', protectSuperAdmin, toggleAiApiKeyStatus);
+router.delete('/ai-api-keys/:id', protectSuperAdmin, deleteAiApiKey);
 
 module.exports = router;
 

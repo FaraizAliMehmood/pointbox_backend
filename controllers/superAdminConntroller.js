@@ -13,13 +13,11 @@ const Terms = require('../models/Terms');
 const NewsLetters = require('../models/NewsLetters');
 const NewsLetterEmails = require('../models/NewsLetterEmails');
 const SEO = require('../models/SEO');
-const AiApiKey = require('../models/AiApiKey');
 const bcrypt = require('bcryptjs');
 const { generateToken } = require('../middleware/auth');
 const { uploadToCloudinary, deleteFromCloudinary } = require('../utils/cloudinaryUpload');
 const { sendEmail } = require('../config/email');
 const { generateTransactionId } = require('../utils/export');
-const { encrypt, decrypt, maskSecret } = require('../utils/encryption');
 const moment = require("moment");
 const {JWT} = require("google-auth-library");
 const axios = require('axios')
@@ -318,7 +316,7 @@ exports.updateEmployee = async (req, res) => {
 // @access  Private (Super Admin)
 exports.createCompany = async (req, res) => {
   try {
-    const { companyName, email, password, phone, licenseNumber, vatNumber, address, country, employeeCount, aiApiEnabled } = req.body;
+    const { companyName, email, password, phone, licenseNumber, vatNumber, address, country, employeeCount } = req.body;
 
     const company = await Company.findOne({email})
     if(company){
@@ -334,9 +332,9 @@ exports.createCompany = async (req, res) => {
         companyLogo = result.secure_url;
         publicId = result.public_id;
       } catch (uploadError) {
-        return res.status(400).json({
-          success: false,
-          message: `Failed to upload logo: ${uploadError.message}`
+        return res.status(400).json({ 
+          success: false, 
+          message: `Failed to upload logo: ${uploadError.message}` 
         });
       }
     }
@@ -352,8 +350,7 @@ exports.createCompany = async (req, res) => {
       country,
       companyLogo,
       publicId,
-      employeeCount,
-      aiApiEnabled: aiApiEnabled !== undefined ? (aiApiEnabled === 'true' || aiApiEnabled === true) : false,
+      employeeCount
     });
 
     res.status(201).json({
@@ -409,8 +406,8 @@ exports.updateCompany = async (req, res) => {
     }
 
     // Update other fields from req.body
-    const { companyName, email, password, phone, licenseNumber, vatNumber, address, country, employeeCount, aiApiEnabled } = req.body;
-
+    const { companyName, email, password, phone, licenseNumber, vatNumber, address, country, employeeCount } = req.body;
+    
     if (companyName) company.companyName = companyName;
     if (email) company.email = email;
     if (password) company.password = password;
@@ -420,7 +417,6 @@ exports.updateCompany = async (req, res) => {
     if (address !== undefined) company.address = address;
     if (country !== undefined) company.country = country;
     if (employeeCount !== undefined) company.employeeCount = employeeCount;
-    if (aiApiEnabled !== undefined) company.aiApiEnabled = aiApiEnabled === 'true' || aiApiEnabled === true;
 
     await company.save();
 
@@ -439,28 +435,6 @@ exports.toggleCompanyStatus = async (req, res) => {
     const company = await Company.findByIdAndUpdate(
       req.params.id,
       { isActive },
-      { new: true }
-    );
-
-    if (!company) {
-      return res.status(404).json({ success: false, message: 'Company not found' });
-    }
-
-    res.json({ success: true, data: company });
-  } catch (error) {
-    res.status(400).json({ success: false, message: error.message });
-  }
-};
-
-// @desc    Toggle Company AI API Access (Enable/Disable)
-// @route   PUT /api/superadmin/companies/:id/ai-access
-// @access  Private (Super Admin)
-exports.toggleCompanyAiAccess = async (req, res) => {
-  try {
-    const { aiApiEnabled } = req.body;
-    const company = await Company.findByIdAndUpdate(
-      req.params.id,
-      { aiApiEnabled },
       { new: true }
     );
 
@@ -885,7 +859,6 @@ exports.uploadBanner = async (req, res) => {
       startDate: req.body.startDate,
       endDate: req.body.endDate,
       type: req.body.type,
-      language: req.body.language || 'en',
       createdBy: req.user._id,
     });
 
@@ -942,15 +915,14 @@ exports.updateBanner = async (req, res) => {
     }
 
     // Update other fields from req.body
-    const { title, description, badge, startDate, endDate, type, isActive, language } = req.body;
-
+    const { title, description, badge, startDate, endDate, type, isActive } = req.body;
+    
     if (title !== undefined) banner.title = title;
     if (description !== undefined) banner.description = description;
     if (badge !== undefined) banner.badge = badge;
     if (startDate !== undefined) banner.startDate = startDate;
     if (endDate !== undefined) banner.endDate = endDate;
     if (type !== undefined) banner.type = type;
-    if (language !== undefined) banner.language = language;
     if (isActive !== undefined) banner.isActive = isActive;
 
     await banner.save();
@@ -1825,181 +1797,5 @@ exports.updateSEO = async (req, res) => {
     });
   } catch (error) {
     res.status(400).json({ success: false, message: error.message });
-  }
-};
-
-// @desc    Create AI API Key
-// @route   POST /api/superadmin/ai-api-keys
-// @access  Private (Super Admin)
-exports.createAiApiKey = async (req, res) => {
-  try {
-    const { provider, label, apiKey, isActive } = req.body;
-
-    if (!provider || !label || !apiKey) {
-      return res.status(400).json({
-        success: false,
-        message: 'Provider, label and apiKey are required',
-      });
-    }
-
-    const created = await AiApiKey.create({
-      provider,
-      label,
-      apiKey: encrypt(apiKey),
-      isActive: isActive !== undefined ? isActive : true,
-      createdBy: req.user._id,
-    });
-
-    res.status(201).json({
-      success: true,
-      data: {
-        _id: created._id,
-        provider: created.provider,
-        label: created.label,
-        apiKeyPreview: maskSecret(apiKey),
-        isActive: created.isActive,
-        createdAt: created.createdAt,
-        updatedAt: created.updatedAt,
-      },
-    });
-  } catch (error) {
-    res.status(400).json({ success: false, message: error.message });
-  }
-};
-
-// @desc    Get all AI API Keys (keys are masked)
-// @route   GET /api/superadmin/ai-api-keys
-// @access  Private (Super Admin)
-exports.getAiApiKeys = async (req, res) => {
-  try {
-    const keys = await AiApiKey.find().select('+apiKey').sort({ createdAt: -1 });
-
-    const data = keys.map((key) => {
-      let apiKeyPreview = '****';
-      try {
-        apiKeyPreview = maskSecret(decrypt(key.apiKey));
-      } catch (e) {
-        apiKeyPreview = '****';
-      }
-      return {
-        _id: key._id,
-        provider: key.provider,
-        label: key.label,
-        apiKeyPreview,
-        isActive: key.isActive,
-        createdAt: key.createdAt,
-        updatedAt: key.updatedAt,
-      };
-    });
-
-    res.json({ success: true, data });
-  } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
-  }
-};
-
-// @desc    Get single AI API Key (optionally reveal full decrypted key)
-// @route   GET /api/superadmin/ai-api-keys/:id?reveal=true
-// @access  Private (Super Admin)
-exports.getAiApiKeyById = async (req, res) => {
-  try {
-    const key = await AiApiKey.findById(req.params.id).select('+apiKey');
-
-    if (!key) {
-      return res.status(404).json({ success: false, message: 'AI API key not found' });
-    }
-
-    const decrypted = decrypt(key.apiKey);
-    const reveal = req.query.reveal === 'true';
-
-    res.json({
-      success: true,
-      data: {
-        _id: key._id,
-        provider: key.provider,
-        label: key.label,
-        apiKey: reveal ? decrypted : undefined,
-        apiKeyPreview: maskSecret(decrypted),
-        isActive: key.isActive,
-        createdAt: key.createdAt,
-        updatedAt: key.updatedAt,
-      },
-    });
-  } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
-  }
-};
-
-// @desc    Update AI API Key
-// @route   PUT /api/superadmin/ai-api-keys/:id
-// @access  Private (Super Admin)
-exports.updateAiApiKey = async (req, res) => {
-  try {
-    const { provider, label, apiKey, isActive } = req.body;
-
-    const key = await AiApiKey.findById(req.params.id);
-
-    if (!key) {
-      return res.status(404).json({ success: false, message: 'AI API key not found' });
-    }
-
-    if (provider !== undefined) key.provider = provider;
-    if (label !== undefined) key.label = label;
-    if (isActive !== undefined) key.isActive = isActive;
-    if (apiKey) key.apiKey = encrypt(apiKey);
-
-    await key.save();
-
-    res.json({
-      success: true,
-      data: {
-        _id: key._id,
-        provider: key.provider,
-        label: key.label,
-        apiKeyPreview: maskSecret(apiKey || decrypt(key.apiKey)),
-        isActive: key.isActive,
-        createdAt: key.createdAt,
-        updatedAt: key.updatedAt,
-      },
-    });
-  } catch (error) {
-    res.status(400).json({ success: false, message: error.message });
-  }
-};
-
-// @desc    Toggle AI API Key active status
-// @route   PUT /api/superadmin/ai-api-keys/:id/status
-// @access  Private (Super Admin)
-exports.toggleAiApiKeyStatus = async (req, res) => {
-  try {
-    const key = await AiApiKey.findById(req.params.id);
-
-    if (!key) {
-      return res.status(404).json({ success: false, message: 'AI API key not found' });
-    }
-
-    key.isActive = !key.isActive;
-    await key.save();
-
-    res.json({ success: true, data: { _id: key._id, isActive: key.isActive } });
-  } catch (error) {
-    res.status(400).json({ success: false, message: error.message });
-  }
-};
-
-// @desc    Delete AI API Key
-// @route   DELETE /api/superadmin/ai-api-keys/:id
-// @access  Private (Super Admin)
-exports.deleteAiApiKey = async (req, res) => {
-  try {
-    const key = await AiApiKey.findByIdAndDelete(req.params.id);
-
-    if (!key) {
-      return res.status(404).json({ success: false, message: 'AI API key not found' });
-    }
-
-    res.json({ success: true, message: 'AI API key deleted successfully' });
-  } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
   }
 };

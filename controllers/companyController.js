@@ -7,6 +7,7 @@ const Employee = require('../models/Employee');
 const Notification = require('../models/Notification');
 const Query = require('../models/Query');
 const Banner = require("../models/Banner");
+const Tier = require("../models/Tier");
 const { generateToken } = require('../middleware/auth');
 const { uploadToCloudinary, deleteFromCloudinary } = require('../utils/cloudinaryUpload');
 const { exportToCSV, exportToXLSX, exportToPDF } = require('../utils/export');
@@ -14,6 +15,7 @@ const { sendEmail } = require('../config/email');
 const moment = require("moment");
 const {JWT} = require("google-auth-library");
 const axios = require('axios')
+
 
 // @desc    Register Company
 // @route   POST /api/company/signup
@@ -768,6 +770,7 @@ exports.uploadBanner = async (req, res) => {
       endDate: req.body.endDate,
       points: req.body.points,
       type: req.body.type || 'regular',
+      language: req.body.language || 'en',
       isActive: req.body.isActive !== undefined ? req.body.isActive === 'true' : true,
       createdBy: req.user._id,
       createdByModel: 'Company',
@@ -828,6 +831,7 @@ exports.uploadBanner = async (req, res) => {
       endDate: req.body.endDate,
       points: req.body.points,
       type: req.body.type || 'regular',
+      language: req.body.language || 'en',
       isActive: req.body.isActive !== undefined ? req.body.isActive === 'true' : true,
       createdBy: req.user._id,
       createdByModel: 'Company',
@@ -884,6 +888,7 @@ exports.updateBanner = async (req, res) => {
     if (req.body.startDate !== undefined) banner.startDate = req.body.startDate;
     if (req.body.endDate !== undefined) banner.endDate = req.body.endDate;
     if (req.body.type !== undefined) banner.type = req.body.type;
+    if (req.body.language !== undefined) banner.language = req.body.language;
 
     if (req.body.isActive !== undefined) banner.isActive = req.body.isActive === 'true' || req.body.isActive === true;
 
@@ -908,6 +913,94 @@ exports.deleteBanner = async (req, res) => {
     await banner.deleteOne();
 
     res.json({ success: true, message: 'Banner deleted successfully' });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// @desc    Get all Tiers
+// @route   GET /api/company/tiers
+// @access  Private (Company)
+exports.getTiers = async (req, res) => {
+  try {
+    const tiers = await Tier.find({ createdBy: req.user._id }).sort({ order: 1, minPoints: 1 });
+    res.json({ success: true, data: tiers });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// @desc    Create Tier
+// @route   POST /api/company/tiers
+// @access  Private (Company)
+exports.createTier = async (req, res) => {
+  try {
+    const tier = await Tier.create({
+      name: req.body.name,
+      color: req.body.color,
+      bgColor: req.body.bgColor,
+      borderColor: req.body.borderColor,
+      minPoints: req.body.minPoints,
+      maxPoints: req.body.maxPoints,
+      featured: req.body.featured,
+      benefits: Array.isArray(req.body.benefits) ? req.body.benefits : [],
+      expiryMonths: req.body.expiryMonths,
+      order: req.body.order,
+      isActive: req.body.isActive,
+      createdBy: req.user._id,
+    });
+
+    res.status(201).json({ success: true, data: tier });
+  } catch (error) {
+    res.status(400).json({ success: false, message: error.message });
+  }
+};
+
+// @desc    Update Tier
+// @route   PUT /api/company/tiers/:id
+// @access  Private (Company)
+exports.updateTier = async (req, res) => {
+  try {
+    const tier = await Tier.findOne({ _id: req.params.id, createdBy: req.user._id });
+
+    if (!tier) {
+      return res.status(404).json({ success: false, message: 'Tier not found' });
+    }
+
+    if (req.body.name !== undefined) tier.name = req.body.name;
+    if (req.body.color !== undefined) tier.color = req.body.color;
+    if (req.body.bgColor !== undefined) tier.bgColor = req.body.bgColor;
+    if (req.body.borderColor !== undefined) tier.borderColor = req.body.borderColor;
+    if (req.body.minPoints !== undefined) tier.minPoints = req.body.minPoints;
+    if (req.body.maxPoints !== undefined) tier.maxPoints = req.body.maxPoints;
+    if (req.body.featured !== undefined) tier.featured = req.body.featured;
+    if (req.body.benefits !== undefined) tier.benefits = Array.isArray(req.body.benefits) ? req.body.benefits : tier.benefits;
+    if (req.body.expiryMonths !== undefined) tier.expiryMonths = req.body.expiryMonths;
+    if (req.body.order !== undefined) tier.order = req.body.order;
+    if (req.body.isActive !== undefined) tier.isActive = req.body.isActive;
+
+    await tier.save();
+
+    res.json({ success: true, data: tier });
+  } catch (error) {
+    res.status(400).json({ success: false, message: error.message });
+  }
+};
+
+// @desc    Delete Tier
+// @route   DELETE /api/company/tiers/:id
+// @access  Private (Company)
+exports.deleteTier = async (req, res) => {
+  try {
+    const tier = await Tier.findOne({ _id: req.params.id, createdBy: req.user._id });
+
+    if (!tier) {
+      return res.status(404).json({ success: false, message: 'Tier not found' });
+    }
+
+    await tier.deleteOne();
+
+    res.json({ success: true, message: 'Tier deleted successfully' });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }

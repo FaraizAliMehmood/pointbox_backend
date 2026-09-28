@@ -14,7 +14,6 @@ const bcrypt = require('bcryptjs');
 const { generateToken } = require('../middleware/auth');
 const { uploadToCloudinary, deleteFromCloudinary } = require('../utils/cloudinaryUpload');
 const { sendEmail } = require('../config/email');
-const { sendNotificationToUsers } = require('../utils/fcmService');
 const moment = require("moment");
 const {JWT} = require("google-auth-library");
 const axios = require('axios')

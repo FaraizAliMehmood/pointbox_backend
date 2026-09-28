@@ -59,6 +59,10 @@ publicId:{
     type: Boolean,
     default: true,
   },
+  aiApiEnabled: {
+    type: Boolean,
+    default: false,
+  },
   otp:{
     type: Number
   }
@@ -69,4 +73,3 @@ publicId:{
 const Company = mongoose.models.Company || mongoose.model('Company', companySchema);
 
 module.exports = Company;
-

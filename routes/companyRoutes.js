@@ -29,6 +29,10 @@ const {
   getBanners,
   updateBanner,
   deleteBanner,
+  getTiers,
+  createTier,
+  updateTier,
+  deleteTier,
   verifyOtp,
   checkEmail,
   changePasswordWithOTP,
@@ -37,7 +41,6 @@ const {
 } = require('../controllers/companyController');
 const { protectCompany } = require('../middleware/auth');
 const { uploadSingle, uploadLogo } = require('../middleware/upload');
-
 // Public routes
 router.post('/signup',uploadLogo,signup);
 router.post('/login', login);
@@ -79,6 +82,12 @@ router.get('/banners',protectCompany, getBanners);
 router.post('/banners',protectCompany, uploadSingle, uploadBanner);
 router.put('/banners/:id',protectCompany, uploadSingle, updateBanner);
 router.delete('/banners/:id',protectCompany, deleteBanner);
+
+// Tier routes
+router.get('/tiers', protectCompany, getTiers);
+router.post('/tiers', protectCompany, createTier);
+router.put('/tiers/:id', protectCompany, updateTier);
+router.delete('/tiers/:id', protectCompany, deleteTier);
 
 
 module.exports = router;
