@@ -7,6 +7,7 @@ const Banner = require('../models/Banner');
 const Query = require('../models/Query');
 const Contact = require('../models/Contact');
 const Company = require('../models/Company');
+const Tier = require('../models/Tier');
 const NewsLetters = require('../models/NewsLetters');
 const { generateToken } = require('../middleware/auth');
 const { sendEmail } = require('../config/email');
@@ -154,6 +155,22 @@ exports.login = async (req, res) => {
   }
 };
 
+// Find the tier a customer currently sits in for a company, based on tier_points
+function findCurrentTier(companyTiers, tierPoints) {
+  if (!companyTiers || companyTiers.length === 0) return null;
+
+  const points = tierPoints || 0;
+  const inRange = companyTiers.find(
+    (t) => points >= t.minPoints && (t.maxPoints == null || points <= t.maxPoints)
+  );
+  if (inRange) return inRange;
+
+  // Above the highest tier's range (no upper limit reached) -> top tier
+  // Below the lowest tier's range -> lowest tier
+  const highest = companyTiers[companyTiers.length - 1];
+  return points >= highest.minPoints ? highest : companyTiers[0];
+}
+
 // @desc    Get Customer Profile
 // @route   GET /api/customer/profile
 // @access  Private (Customer)
@@ -161,19 +178,47 @@ exports.getProfile = async (req, res) => {
   try {
     console.log("Profile:",req.user._id);
     const customer = await Customer.findById(req.user._id)
-      .populate('linkedCompanies.company', 'companyName email redeem_points');
+      .populate('linkedCompanies.company', 'companyName email redeem_points companyLogo');
+
+    const linkedWithCompany = customer.linkedCompanies.filter((link) => link.company);
+    const companyIds = linkedWithCompany.map((link) => link.company._id);
+
+    // Fetch active tiers for all linked companies in one query
+    const tiers = await Tier.find({ createdBy: { $in: companyIds }, isActive: true }).sort({
+      minPoints: 1,
+    });
+    const tiersByCompany = {};
+    tiers.forEach((tier) => {
+      const key = tier.createdBy.toString();
+      if (!tiersByCompany[key]) tiersByCompany[key] = [];
+      tiersByCompany[key].push(tier);
+    });
 
     // Convert customer to plain object and add linkedBrands array for frontend compatibility
     const customerData = customer.toObject();
-    customerData.linkedBrands = customer.linkedCompanies
-      .filter((link) => link.company) // Filter out any null/undefined companies
-      .map((link) => {
-        // Handle both populated and non-populated cases
-        if (link.company && typeof link.company === 'object' && link.company._id) {
-          return link.company._id.toString();
-        }
-        return link.company.toString();
-      });
+
+    customerData.linkedCompanies = linkedWithCompany.map((link) => {
+      const linkObj = link.toObject();
+      const companyTiers = tiersByCompany[link.company._id.toString()] || [];
+      const currentTier = findCurrentTier(companyTiers, link.tier_points);
+
+      linkObj.tier = currentTier
+        ? {
+            id: currentTier._id,
+            name: currentTier.name,
+            minPoints: currentTier.minPoints,
+            maxPoints: currentTier.maxPoints ?? null,
+            expiryMonths: currentTier.expiryMonths ?? null,
+            expiryDate: currentTier.expiryMonths
+              ? moment(link.linkedAt).add(currentTier.expiryMonths, 'months').toDate()
+              : null,
+          }
+        : null;
+
+      return linkObj;
+    });
+
+    customerData.linkedBrands = linkedWithCompany.map((link) => link.company._id.toString());
 
     res.json({
       success: true,
