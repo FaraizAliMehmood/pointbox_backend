@@ -483,6 +483,35 @@ exports.getWhatsNews = async (req, res) => {
   }
 };
 
+// @desc    Get the 3 banners with the highest points
+// @route   GET /api/customer/top-banners
+// @access  Public
+exports.getTopBanners = async (req, res) => {
+  try {
+    const topBanners = await Banner.find({ isActive: true })
+      .sort({ points: -1 })
+      .limit(3);
+    res.json({ success: true, data: topBanners });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// @desc    Get the 3 most recently registered companies
+// @route   GET /api/customer/recent-companies
+// @access  Public
+exports.getRecentCompanies = async (req, res) => {
+  try {
+    const recentCompanies = await Company.find({ isActive: true })
+      .select('companyName companyLogo country createdAt')
+      .sort({ createdAt: -1 })
+      .limit(3);
+    res.json({ success: true, data: recentCompanies });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
 // @desc    Get Brands List
 // @route   GET /api/customer/brands
 // @access  Public

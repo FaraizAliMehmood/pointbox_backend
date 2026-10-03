@@ -11,7 +11,9 @@ const {
   contactSupport,
   submitContact,
   getBanners,
+  getTopBanners,
   getWhatsNews,
+  getRecentCompanies,
   getBrands,
   linkBrand,
   getLinkedBrands,
@@ -39,7 +41,9 @@ const { protectCustomer } = require('../middleware/auth');
 router.post('/signup', signup);
 router.post('/login', login);
 router.get('/banners', getBanners);
+router.get('/top-banners', getTopBanners);
 router.get('/whats-new', getWhatsNews);
+router.get('/recent-companies', getRecentCompanies);
 router.get('/brands', getBrands);
 router.get('/conversion-rate', getConversionRate);
 router.post('/contact', submitContact);
@@ -73,7 +77,9 @@ router.post('/web/products', getCompanyProducts);
 router.get('/web/faqs', getFAQs);
 router.get('/web/newsletters', getNewsletters);
 router.get('/web/banners', getBanners);
+router.get('/web/top-banners', getTopBanners);
 router.get('/web/whats-new', getWhatsNews);
+router.get('/web/recent-companies', getRecentCompanies);
 router.get('/web/terms',getTerms);
 router.get('/web/seo',getSEO);
 
