@@ -25,6 +25,7 @@ const {
   getNotifications,
   notifications
 } = require('../controllers/employeeController');
+const { scanInvoice } = require('../controllers/invoiceScanController');
 const { protectEmployee } = require('../middleware/auth');
 const { uploadInvoice, uploadSingle } = require('../middleware/upload');
 
@@ -39,6 +40,7 @@ router.post("/notifications",notifications)
 router.post('/verify-customer', protectEmployee, verifyCustomer);
 router.get('/customers', protectEmployee,Customers);
 router.post('/add-points', protectEmployee, uploadInvoice, addRedeemPoints);
+router.post('/scan-invoice', protectEmployee, uploadInvoice, scanInvoice);
 router.get('/redeem-history', protectEmployee, getRedeemHistory);
 router.get('/notifications', protectEmployee, getNotifications);
 
