@@ -1,10 +1,10 @@
-const { extractInvoiceData } = require('../utils/geminiService');
+const { extractInvoiceData } = require('../utils/openaiService');
 
 const ALLOWED_MIME_TYPES = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
 
 /**
  * Receives a captured invoice photo and returns the invoice number,
- * phone number(s), and total amount extracted via Google Gemini.
+ * phone number(s), and total amount extracted via OpenAI.
  */
 exports.scanInvoice = async (req, res) => {
   try {

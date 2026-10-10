@@ -1,7 +1,7 @@
 const axios = require('axios');
 
-const GEMINI_API_BASE = 'https://generativelanguage.googleapis.com/v1beta/models';
-const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-3.8-flash';
+const OPENAI_API_BASE = 'https://api.openai.com/v1/chat/completions';
+const OPENAI_MODEL = process.env.OPENAI_MODEL || 'gpt-4o-mini';
 
 const INVOICE_EXTRACTION_PROMPT = `You are an invoice data extraction engine. You will be given a photo of an invoice or bill. The invoice may be in any language, currency, layout, or design - do not rely on any fixed template.
 
@@ -25,16 +25,21 @@ Rules:
 - Respond with JSON only, matching the schema exactly.`;
 
 const responseSchema = {
-  type: 'OBJECT',
-  properties: {
-    invoiceNumber: { type: 'STRING', nullable: true },
-    phoneNumbers: { type: 'ARRAY', items: { type: 'STRING' } },
-    amount: { type: 'NUMBER', nullable: true },
-    currency: { type: 'STRING', nullable: true },
-    amountLabel: { type: 'STRING', nullable: true },
-    needsVerification: { type: 'BOOLEAN' },
+  name: 'invoice_extraction',
+  strict: true,
+  schema: {
+    type: 'object',
+    properties: {
+      invoiceNumber: { type: ['string', 'null'] },
+      phoneNumbers: { type: 'array', items: { type: 'string' } },
+      amount: { type: ['number', 'null'] },
+      currency: { type: ['string', 'null'] },
+      amountLabel: { type: ['string', 'null'] },
+      needsVerification: { type: 'boolean' },
+    },
+    required: ['invoiceNumber', 'phoneNumbers', 'amount', 'currency', 'amountLabel', 'needsVerification'],
+    additionalProperties: false,
   },
-  required: ['invoiceNumber', 'phoneNumbers', 'amount', 'currency', 'needsVerification'],
 };
 
 const normalizeResult = (raw) => {
@@ -60,55 +65,56 @@ const normalizeResult = (raw) => {
 };
 
 /**
- * Sends an invoice image to Gemini and returns the normalized extracted fields.
+ * Sends an invoice image to OpenAI and returns the normalized extracted fields.
  */
 async function extractInvoiceData(imageBuffer, mimeType) {
-  const apiKey = process.env.GEMINI_API_KEY;
+  const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) {
-    throw new Error('Gemini API key is not configured on the server');
+    throw new Error('OpenAI API key is not configured on the server');
   }
 
   const base64Image = imageBuffer.toString('base64');
+  const dataUrl = `data:${mimeType};base64,${base64Image}`;
 
   const requestBody = {
-    contents: [
+    model: OPENAI_MODEL,
+    temperature: 0,
+    messages: [
       {
-        parts: [
-          { text: INVOICE_EXTRACTION_PROMPT },
-          { inline_data: { mime_type: mimeType, data: base64Image } },
+        role: 'user',
+        content: [
+          { type: 'text', text: INVOICE_EXTRACTION_PROMPT },
+          { type: 'image_url', image_url: { url: dataUrl } },
         ],
       },
     ],
-    generationConfig: {
-      temperature: 0,
-      responseMimeType: 'application/json',
-      responseSchema,
-    },
+    response_format: { type: 'json_schema', json_schema: responseSchema },
   };
-
-  const url = `${GEMINI_API_BASE}/${GEMINI_MODEL}:generateContent?key=${apiKey}`;
 
   let response;
   try {
-    response = await axios.post(url, requestBody, {
-      headers: { 'Content-Type': 'application/json' },
+    response = await axios.post(OPENAI_API_BASE, requestBody, {
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${apiKey}`,
+      },
       timeout: 30000,
     });
   } catch (err) {
-    const message = err.response?.data?.error?.message || err.message || 'Gemini request failed';
-    throw new Error(`Gemini API error: ${message}`);
+    const message = err.response?.data?.error?.message || err.message || 'OpenAI request failed';
+    throw new Error(`OpenAI API error: ${message}`);
   }
 
-  const text = response.data?.candidates?.[0]?.content?.parts?.[0]?.text;
+  const text = response.data?.choices?.[0]?.message?.content;
   if (!text) {
-    throw new Error('Gemini did not return any content for this image');
+    throw new Error('OpenAI did not return any content for this image');
   }
 
   let parsed;
   try {
     parsed = JSON.parse(text);
   } catch {
-    throw new Error('Gemini returned an invalid response format');
+    throw new Error('OpenAI returned an invalid response format');
   }
 
   return normalizeResult(parsed);
