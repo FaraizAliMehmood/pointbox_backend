@@ -1,4 +1,5 @@
 const Employee = require('../models/Employee');
+const Company = require('../models/Company');
 const bcrypt = require('bcryptjs');
 const Query = require('../models/Query');
 const Product = require('../models/Product');
@@ -73,6 +74,8 @@ exports.login = async (req, res) => {
 
     const token = generateToken(employee._id, 'employee');
 
+    const company = await Company.findById(employee.company).select('aiApiEnabled');
+
     res.json({
       success: true,
       token,
@@ -82,6 +85,7 @@ exports.login = async (req, res) => {
         email: employee.email,
         company: employee.company,
         permissions: employee.permissions || {},
+        aiApiEnabled: company?.aiApiEnabled || false,
       },
     });
   } catch (error) {
