@@ -1,7 +1,10 @@
 const axios = require('axios');
 
 const OPENAI_API_BASE = 'https://api.openai.com/v1/chat/completions';
-const OPENAI_MODEL = process.env.OPENAI_MODEL || 'gpt-4o-mini';
+// gpt-4o-mini's vision OCR is noticeably less reliable on dense small text
+// (invoice numbers, phone numbers) than the full gpt-4o model - default to the
+// more accurate model since misreads here lead to looking up the wrong customer.
+const OPENAI_MODEL = process.env.OPENAI_MODEL || 'gpt-4o';
 
 const INVOICE_EXTRACTION_PROMPT = `You are an invoice data extraction engine. You will be given a photo of an invoice or bill. The invoice may be in any language, currency, layout, or design - do not rely on any fixed template.
 
