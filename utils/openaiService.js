@@ -9,19 +9,22 @@ Extract exactly these fields and respond with JSON matching the provided schema:
 
 1. invoiceNumber: The invoice/bill/receipt reference number exactly as printed, preserving letters, hyphens, slashes and leading zeros. If you cannot reliably identify it, use null.
 
-2. phoneNumbers: Every contact phone number printed on the invoice, as an array of strings exactly as printed (keep formatting such as "+" and spaces). If none are found, return an empty array. Never invent numbers.
+2. phoneNumbers: Every contact phone number printed anywhere on the invoice (including the issuing business's own letterhead/header/footer contact numbers), as an array of strings exactly as printed (keep formatting such as "+" and spaces). If none are found, return an empty array. Never invent numbers.
 
-3. amount: The final total payable amount for the invoice - NOT the subtotal, tax line, discount, or amount already paid. If the invoice shows a "Balance Due" instead of a "Total" / "Grand Total" / "Amount Payable", use the balance due value. If you cannot reliably identify a single final amount, use null.
+3. customerPhoneNumber: The phone number that belongs specifically to the CUSTOMER / BUYER the invoice was issued to - for example a number printed next to a "Bill To", "Sold To", "Customer", "Ship To", "Client" section, or directly beside the customer's name/address. This is NEVER the phone number of the business/store/vendor that issued the invoice (do not use numbers found in the letterhead, logo area, header, or footer - those belong to the seller, not the customer). If the invoice does not clearly label a customer-specific phone number, or you cannot confidently tell it apart from the seller's own contact numbers, use null rather than guessing.
 
-4. currency: The currency of the amount (e.g. "USD", "PKR", "EUR"), identified from symbols or text on the invoice. Do not assume a default currency. If it cannot be determined, use null.
+4. amount: The final total payable amount for the invoice - NOT the subtotal, tax line, discount, or amount already paid. If the invoice shows a "Balance Due" instead of a "Total" / "Grand Total" / "Amount Payable", use the balance due value. If you cannot reliably identify a single final amount, use null.
 
-5. amountLabel: The exact label/field name printed on the invoice next to the amount you extracted (for example "Total", "Grand Total", "Balance Due", "Amount Payable"). Use null if unknown.
+5. currency: The currency of the amount (e.g. "USD", "PKR", "EUR"), identified from symbols or text on the invoice. Do not assume a default currency. If it cannot be determined, use null.
 
-6. needsVerification: true if the amount is ambiguous, there are multiple candidate totals, the image is unclear, or you are not confident in the extracted amount. Otherwise false.
+6. amountLabel: The exact label/field name printed on the invoice next to the amount you extracted (for example "Total", "Grand Total", "Balance Due", "Amount Payable"). Use null if unknown.
+
+7. needsVerification: true if the amount is ambiguous, there are multiple candidate totals, the image is unclear, or you are not confident in the extracted amount. Otherwise false.
 
 Rules:
 - Never invent or assume missing information.
 - Only return values you can actually read on the invoice.
+- Do not confuse the seller's/business's own contact number with the customer's phone number - they are frequently both printed on the same invoice and must not be mixed up.
 - Respond with JSON only, matching the schema exactly.`;
 
 const responseSchema = {
@@ -32,12 +35,13 @@ const responseSchema = {
     properties: {
       invoiceNumber: { type: ['string', 'null'] },
       phoneNumbers: { type: 'array', items: { type: 'string' } },
+      customerPhoneNumber: { type: ['string', 'null'] },
       amount: { type: ['number', 'null'] },
       currency: { type: ['string', 'null'] },
       amountLabel: { type: ['string', 'null'] },
       needsVerification: { type: 'boolean' },
     },
-    required: ['invoiceNumber', 'phoneNumbers', 'amount', 'currency', 'amountLabel', 'needsVerification'],
+    required: ['invoiceNumber', 'phoneNumbers', 'customerPhoneNumber', 'amount', 'currency', 'amountLabel', 'needsVerification'],
     additionalProperties: false,
   },
 };
@@ -50,6 +54,11 @@ const normalizeResult = (raw) => {
     ? raw.phoneNumbers.filter((p) => typeof p === 'string' && p.trim()).map((p) => p.trim())
     : [];
 
+  const customerPhoneNumber =
+    typeof raw.customerPhoneNumber === 'string' && raw.customerPhoneNumber.trim()
+      ? raw.customerPhoneNumber.trim()
+      : null;
+
   const amount =
     typeof raw.amount === 'number' && Number.isFinite(raw.amount) ? raw.amount : null;
 
@@ -61,7 +70,7 @@ const normalizeResult = (raw) => {
 
   const needsVerification = Boolean(raw.needsVerification) || amount === null;
 
-  return { invoiceNumber, phoneNumbers, amount, currency, amountLabel, needsVerification };
+  return { invoiceNumber, phoneNumbers, customerPhoneNumber, amount, currency, amountLabel, needsVerification };
 };
 
 /**
