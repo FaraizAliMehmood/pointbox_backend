@@ -1694,7 +1694,7 @@ exports.notifications = async (req, res) => {
       return res.status(400).json({ error: "deviceTokens must be an array" });
     }
 
-    const webAppBaseUrl = process.env.WEB_APP_URL || process.env.FRONTEND_URL || 'https://pointbox-3f28b.web.app';
+    const webAppBaseUrl = 'https://pointbox-main.vercel.app';
     const iconUrl = `${webAppBaseUrl}/web-app-manifest-192x192.png`;
     const imageUrl = req.body.imageUrl || iconUrl;
 
