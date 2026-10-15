@@ -5,23 +5,19 @@ const errorHandler = (err, req, res, next) => {
   // Log to console for dev
   console.error(err);
 
-  // Mongoose bad ObjectId
-  if (err.name === 'CastError') {
-    const message = 'Resource not found';
-    error = { message, statusCode: 404 };
+  // MySQL duplicate key (unique constraint violation)
+  if (err.code === 'ER_DUP_ENTRY') {
+    error = { message: 'Resource already exists', statusCode: 400 };
   }
 
-  // Mongoose duplicate key
-  if (err.code === 11000) {
-    const field = Object.keys(err.keyValue)[0];
-    const message = `${field} already exists`;
-    error = { message, statusCode: 400 };
+  // MySQL missing required field / bad enum value
+  if (err.code === 'ER_NO_DEFAULT_FOR_FIELD' || err.code === 'ER_BAD_NULL_ERROR' || err.code === 'WARN_DATA_TRUNCATED') {
+    error = { message: err.sqlMessage || 'Invalid data provided', statusCode: 400 };
   }
 
-  // Mongoose validation error
-  if (err.name === 'ValidationError') {
-    const message = Object.values(err.errors).map(val => val.message).join(', ');
-    error = { message, statusCode: 400 };
+  // MySQL foreign key constraint failure
+  if (err.code === 'ER_NO_REFERENCED_ROW_2' || err.code === 'ER_ROW_IS_REFERENCED_2') {
+    error = { message: 'Referenced resource not found', statusCode: 400 };
   }
 
   res.status(error.statusCode || 500).json({

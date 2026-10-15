@@ -14,6 +14,7 @@ const bcrypt = require('bcryptjs');
 const { generateToken } = require('../middleware/auth');
 const { uploadToCloudinary, deleteFromCloudinary } = require('../utils/cloudinaryUpload');
 const { sendEmail } = require('../config/email');
+const { sendNotificationToUsers } = require('../utils/fcmService');
 const moment = require("moment");
 const {JWT} = require("google-auth-library");
 const axios = require('axios')
@@ -37,7 +38,7 @@ exports.login = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Please provide email and password' });
     }
 
-    const admin = await Admin.findOne({ email }).select('+password');
+    const admin = await Admin.findByEmail(email, { includePassword: true });
 
     if (!admin) {
       return res.status(401).json({ success: false, message: 'Invalid credentials' });
@@ -52,13 +53,13 @@ exports.login = async (req, res) => {
       return res.status(401).json({ success: false, message: 'Account is deactivated' });
     }
 
-    const token = generateToken(admin._id, 'admin');
+    const token = generateToken(admin.id, 'admin');
 
     res.json({
       success: true,
       token,
       user: {
-        id: admin._id,
+        id: admin.id,
         username: admin.username,
         email: admin.email,
         permissions: admin.permissions,
@@ -78,7 +79,7 @@ exports.getCompanies = async (req, res) => {
       return res.status(403).json({ success: false, message: 'You do not have permission to manage companies' });
     }
 
-    const companies = await Company.find();
+    const companies = await Company.findAll();
     res.json({ success: true, data: companies });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
@@ -95,7 +96,7 @@ exports.createCompany = async (req, res) => {
     }
 
     const { companyName, email, password, phone, licenseNumber, vatNumber, address, country, employeeCount } = req.body;
-    const company = await Company.findOne({email})
+    const company = await Company.findByEmail(email);
     if(company){
       return  res.status(400).json({ success: false, message: "Company with this email already exist." });
      }
@@ -130,7 +131,7 @@ exports.createCompany = async (req, res) => {
       companyLogo,
       publicId
     };
-    
+
     // Handle employeeCount - convert string to number if provided
     if (employeeCount !== undefined && employeeCount !== null && employeeCount !== '') {
       const parsedCount = parseInt(employeeCount, 10);
@@ -138,7 +139,7 @@ exports.createCompany = async (req, res) => {
         companyData.employeeCount = parsedCount;
       }
     }
-    
+
     const compData = await Company.create(companyData);
 
     res.status(201).json({
@@ -165,6 +166,8 @@ exports.updateCompany = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Company not found' });
     }
 
+    const updates = {};
+
     // Handle logo upload if provided
     if (req.file) {
       try {
@@ -175,8 +178,8 @@ exports.updateCompany = async (req, res) => {
 
         // Upload new logo to Cloudinary
         const result = await uploadToCloudinary(req.file.buffer, 'company-logos');
-        company.companyLogo = result.secure_url;
-        company.publicId = result.public_id;
+        updates.companyLogo = result.secure_url;
+        updates.publicId = result.public_id;
       } catch (uploadError) {
         return res.status(400).json({
           success: false,
@@ -187,22 +190,22 @@ exports.updateCompany = async (req, res) => {
 
     // Update other fields
     const { companyName, email, phone, licenseNumber, vatNumber, address, country, password, employeeCount } = req.body;
-    if (companyName) company.companyName = companyName;
-    if (email) company.email = email;
-    if (phone) company.phone = phone;
-    if (licenseNumber) company.licenseNumber = licenseNumber;
-    if (vatNumber) company.vatNumber = vatNumber;
-    if (address) company.address = address;
-    if (country) company.country = country;
-    if (employeeCount !== undefined) company.employeeCount = employeeCount;
-    
+    if (companyName) updates.companyName = companyName;
+    if (email) updates.email = email;
+    if (phone) updates.phone = phone;
+    if (licenseNumber) updates.licenseNumber = licenseNumber;
+    if (vatNumber) updates.vatNumber = vatNumber;
+    if (address) updates.address = address;
+    if (country) updates.country = country;
+    if (employeeCount !== undefined) updates.employeeCount = employeeCount;
+
     if (password) {
-      company.password = await bcrypt.hash(password, 10);
+      updates.password = await bcrypt.hash(password, 10);
     }
 
-    await company.save();
+    const updatedCompany = await Company.updateById(req.params.id, updates);
 
-    res.json({ success: true, data: company });
+    res.json({ success: true, data: updatedCompany });
   } catch (error) {
     res.status(400).json({ success: false, message: error.message });
   }
@@ -218,11 +221,7 @@ exports.toggleCompanyStatus = async (req, res) => {
     }
 
     const { isActive } = req.body;
-    const company = await Company.findByIdAndUpdate(
-      req.params.id,
-      { isActive },
-      { new: true }
-    );
+    const company = await Company.updateById(req.params.id, { isActive });
 
     if (!company) {
       return res.status(404).json({ success: false, message: 'Company not found' });
@@ -258,7 +257,7 @@ exports.deleteCompany = async (req, res) => {
       }
     }
 
-    await company.deleteOne();
+    await Company.deleteById(req.params.id);
 
     res.json({ success: true, message: 'Company deleted successfully' });
   } catch (error) {
@@ -275,7 +274,7 @@ exports.getEmployees = async (req, res) => {
       return res.status(403).json({ success: false, message: 'You do not have permission to manage employees' });
     }
 
-    const employees = await Employee.find().populate('company', 'companyName email');
+    const employees = await Employee.findAll();
     res.json({ success: true, data: employees });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
@@ -292,11 +291,7 @@ exports.toggleEmployeeStatus = async (req, res) => {
     }
 
     const { isActive } = req.body;
-    const employee = await Employee.findByIdAndUpdate(
-      req.params.id,
-      { isActive, activatedBy: req.user._id },
-      { new: true }
-    );
+    const employee = await Employee.updateById(req.params.id, { isActive, activatedBy: req.user.id });
 
     if (!employee) {
       return res.status(404).json({ success: false, message: 'Employee not found' });
@@ -325,20 +320,21 @@ exports.updateEmployee = async (req, res) => {
     }
 
     // Update fields
-    if (name) employee.name = name;
-    if (email) employee.email = email;
-    if (phone) employee.phone = phone;
-    if (dutyAddress) employee.dutyAddress = dutyAddress;
+    const updates = {};
+    if (name) updates.name = name;
+    if (email) updates.email = email;
+    if (phone) updates.phone = phone;
+    if (dutyAddress) updates.dutyAddress = dutyAddress;
     if (password) {
-      employee.password = await bcrypt.hash(password, 10);
+      updates.password = await bcrypt.hash(password, 10);
     }
     if (permissions) {
-      employee.permissions = permissions;
+      updates.permissions = permissions;
     }
 
-    await employee.save();
+    const updatedEmployee = await Employee.updateById(req.params.id, updates);
 
-    res.json({ success: true, data: employee });
+    res.json({ success: true, data: updatedEmployee });
   } catch (error) {
     res.status(400).json({ success: false, message: error.message });
   }
@@ -353,7 +349,7 @@ exports.getCustomers = async (req, res) => {
       return res.status(403).json({ success: false, message: 'You do not have permission to manage customers' });
     }
 
-    const customers = await Customer.find();
+    const customers = await Customer.findAll();
     res.json({ success: true, data: customers });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
@@ -372,7 +368,7 @@ exports.createCustomer = async (req, res) => {
     const { username, email, password, phone, address, country } = req.body;
 
     // Check if customer already exists
-    const existingCustomer = await Customer.findOne({ email });
+    const existingCustomer = await Customer.findByEmail(email);
     if (existingCustomer) {
       return res.status(400).json({ success: false, message: 'Customer with this email already exists' });
     }
@@ -388,7 +384,7 @@ exports.createCustomer = async (req, res) => {
       country,
       isGoogleSignup: false,
       createdBy: 'superadmin',
-      createdById: req.user._id,
+      createdById: req.user.id,
       createdByModel: 'Admin',
     });
 
@@ -418,18 +414,19 @@ exports.updateCustomer = async (req, res) => {
 
     const { username, email, phone, address, country, password } = req.body;
 
-    if (username) customer.username = username;
-    if (email) customer.email = email;
-    if (phone) customer.phone = phone;
-    if (address) customer.address = address;
-    if (country) customer.country = country;
+    const updates = {};
+    if (username) updates.username = username;
+    if (email) updates.email = email;
+    if (phone) updates.phone = phone;
+    if (address) updates.address = address;
+    if (country) updates.country = country;
     if (password) {
-      customer.password = await bcrypt.hash(password, 10);
+      updates.password = await bcrypt.hash(password, 10);
     }
 
-    await customer.save();
+    const updatedCustomer = await Customer.updateById(req.params.id, updates);
 
-    res.json({ success: true, data: customer });
+    res.json({ success: true, data: updatedCustomer });
   } catch (error) {
     res.status(400).json({ success: false, message: error.message });
   }
@@ -451,8 +448,7 @@ exports.deleteCustomer = async (req, res) => {
     }
 
     // Deactivate instead of delete
-    customer.isActive = false;
-    await customer.save();
+    await Customer.updateById(req.params.id, { isActive: false });
 
     res.json({ success: true, message: 'Customer deactivated successfully' });
   } catch (error) {
@@ -469,11 +465,7 @@ exports.getQueries = async (req, res) => {
       return res.status(403).json({ success: false, message: 'You do not have permission to manage queries' });
     }
 
-    const queries = await Query.find()
-      .populate('customer', 'username email phone')
-      .populate('brandId', 'companyName')
-      .populate('responses.respondedBy', 'username email')
-      .sort({ createdAt: -1 });
+    const queries = await Query.findAll();
 
     res.json({ success: true, data: queries });
   } catch (error) {
@@ -497,14 +489,11 @@ exports.respondToQuery = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Query not found' });
     }
 
-    query.responses.push({
-      respondedBy: req.user._id,
+    const updatedQuery = await Query.addResponse(req.params.id, {
+      respondedBy: req.user.id,
       responseModel: 'Admin',
       response,
     });
-
-    query.status = 'resolved';
-    await query.save();
 
     // Send email response
     try {
@@ -519,7 +508,7 @@ exports.respondToQuery = async (req, res) => {
       // Continue even if email fails
     }
 
-    res.json({ success: true, data: query });
+    res.json({ success: true, data: updatedQuery });
   } catch (error) {
     res.status(400).json({ success: false, message: error.message });
   }
@@ -535,17 +524,8 @@ exports.getTransactions = async (req, res) => {
     }
 
     const { transactionId } = req.query;
-    let query = {};
 
-    if (transactionId) {
-      query.transactionId = transactionId;
-    }
-
-    const transactions = await Transaction.find(query)
-      .populate('customer', 'username email phone')
-      .populate('company', 'companyName email')
-      .populate('employee', 'name email')
-      .sort({ createdAt: -1 });
+    const transactions = await Transaction.findAll({ transactionId });
 
     res.json({ success: true, data: transactions });
   } catch (error) {
@@ -562,10 +542,7 @@ exports.getTransactionById = async (req, res) => {
       return res.status(403).json({ success: false, message: 'You do not have permission to manage transactions' });
     }
 
-    const transaction = await Transaction.findById(req.params.id)
-      .populate('customer', 'username email phone')
-      .populate('company', 'companyName email')
-      .populate('employee', 'name email');
+    const transaction = await Transaction.findById(req.params.id);
 
     if (!transaction) {
       return res.status(404).json({ success: false, message: 'Transaction not found' });
@@ -586,7 +563,7 @@ exports.getNotifications = async (req, res) => {
       return res.status(403).json({ success: false, message: 'You do not have permission to manage notifications' });
     }
 
-    const notifications = await Notification.find().sort({ createdAt: -1 });
+    const notifications = await Notification.findAll();
     res.json({ success: true, data: notifications });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
@@ -619,7 +596,7 @@ exports.createNotification = async (req, res) => {
       target: target || 'all',
       targetIds,
       targetModel: targetIds && targetIds.length > 0 ? 'Customer' : undefined,
-      createdBy: req.user._id,
+      createdBy: req.user.id,
       createdByModel: 'Admin',
       sentAt: new Date(),
     });
@@ -630,17 +607,20 @@ exports.createNotification = async (req, res) => {
       let users = [];
 
       // Determine which users to send notifications to
-      if (target === 'all') {
-        users = await Customer.find({ isActive: true });
-      } else if (target === 'customers') {
-        users = await Customer.find({ isActive: true });
+      if (target === 'all' || target === 'customers') {
+        users = await Customer.findAll({ isActive: true });
       } else if (target === 'specific' && targetIds && targetIds.length > 0) {
-        users = await Customer.find({ _id: { $in: targetIds }, isActive: true });
+        const targetedUsers = await Customer.findByIds(targetIds);
+        users = targetedUsers.filter((user) => user.isActive);
       }
 
       // Send notifications
       if (users.length > 0) {
-        fcmResult = await sendNotificationToUsers(users, { title, message }, type || 'both');
+        const usersWithTokens = users.map((user) => ({
+          _id: user.id,
+          fcmTokens: user.deviceToken ? [{ token: user.deviceToken, deviceType: 'mobile' }] : [],
+        }));
+        fcmResult = await sendNotificationToUsers(usersWithTokens, { title, message }, type || 'both');
       }
     } catch (fcmError) {
       console.error('Error sending FCM notifications:', fcmError);
@@ -666,11 +646,13 @@ exports.deleteNotification = async (req, res) => {
       return res.status(403).json({ success: false, message: 'You do not have permission to manage notifications' });
     }
 
-    const notification = await Notification.findByIdAndDelete(req.params.id);
+    const notification = await Notification.findById(req.params.id);
 
     if (!notification) {
       return res.status(404).json({ success: false, message: 'Notification not found' });
     }
+
+    await Notification.deleteById(req.params.id);
 
     res.json({ success: true, message: 'Notification deleted successfully' });
   } catch (error) {
@@ -687,7 +669,7 @@ exports.getBanners = async (req, res) => {
       return res.status(403).json({ success: false, message: 'You do not have permission to manage banners' });
     }
 
-    const banners = await Banner.find().sort({ createdAt: -1 });
+    const banners = await Banner.findAll();
     res.json({ success: true, data: banners });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
@@ -716,9 +698,9 @@ exports.uploadBanner = async (req, res) => {
       imageUrl = result.secure_url;
       publicId = result.public_id;
     } catch (uploadError) {
-      return res.status(400).json({ 
-        success: false, 
-        message: `Failed to upload image: ${uploadError.message}` 
+      return res.status(400).json({
+        success: false,
+        message: `Failed to upload image: ${uploadError.message}`
       });
     }
 
@@ -733,7 +715,7 @@ exports.uploadBanner = async (req, res) => {
       endDate: req.body.endDate,
       type: req.body.type || 'regular',
       isActive: req.body.isActive !== undefined ? req.body.isActive === 'true' : true,
-      createdBy: req.user._id,
+      createdBy: req.user.id,
       createdByModel: 'Admin',
     });
 
@@ -761,6 +743,8 @@ exports.updateBanner = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Banner not found' });
     }
 
+    const updates = {};
+
     // Upload new image if provided
     if (req.file) {
       try {
@@ -768,32 +752,32 @@ exports.updateBanner = async (req, res) => {
         if (banner.public_id) {
           await deleteFromCloudinary(banner.public_id);
         }
-        
+
         // Upload new image
         const result = await uploadToCloudinary(req.file.buffer, 'banners');
-        banner.imageUrl = result.secure_url;
-        banner.public_id = result.public_id;
+        updates.imageUrl = result.secure_url;
+        updates.public_id = result.public_id;
       } catch (uploadError) {
-        return res.status(400).json({ 
-          success: false, 
-          message: `Failed to upload image: ${uploadError.message}` 
+        return res.status(400).json({
+          success: false,
+          message: `Failed to upload image: ${uploadError.message}`
         });
       }
     }
 
     // Update fields
-    if (req.body.title) banner.title = req.body.title;
-    if (req.body.description !== undefined) banner.description = req.body.description;
-    if (req.body.badge !== undefined) banner.badge = req.body.badge;
-    if (req.body.productUrl !== undefined) banner.productUrl = req.body.productUrl;
-    if (req.body.startDate) banner.startDate = req.body.startDate;
-    if (req.body.endDate) banner.endDate = req.body.endDate;
-    if (req.body.type) banner.type = req.body.type;
-    if (req.body.isActive !== undefined) banner.isActive = req.body.isActive === 'true' || req.body.isActive === true;
+    if (req.body.title) updates.title = req.body.title;
+    if (req.body.description !== undefined) updates.description = req.body.description;
+    if (req.body.badge !== undefined) updates.badge = req.body.badge;
+    if (req.body.productUrl !== undefined) updates.productUrl = req.body.productUrl;
+    if (req.body.startDate) updates.startDate = req.body.startDate;
+    if (req.body.endDate) updates.endDate = req.body.endDate;
+    if (req.body.type) updates.type = req.body.type;
+    if (req.body.isActive !== undefined) updates.isActive = req.body.isActive === 'true' || req.body.isActive === true;
 
-    await banner.save();
+    const updatedBanner = await Banner.updateById(req.params.id, updates);
 
-    res.json({ success: true, data: banner });
+    res.json({ success: true, data: updatedBanner });
   } catch (error) {
     res.status(400).json({ success: false, message: error.message });
   }
@@ -814,7 +798,7 @@ exports.deleteBanner = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Banner not found' });
     }
 
-    await banner.deleteOne();
+    await Banner.deleteById(req.params.id);
 
     res.json({ success: true, message: 'Banner deleted successfully' });
   } catch (error) {
@@ -828,22 +812,22 @@ exports.updateAdminPassword = async (req, res) => {
 
     // Validate required fields
     if (!currentPassword || !newPassword) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'Current password and new password are required' 
+      return res.status(400).json({
+        success: false,
+        message: 'Current password and new password are required'
       });
     }
 
     // Validate new password length
     if (newPassword.length < 6) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'New password must be at least 6 characters long' 
+      return res.status(400).json({
+        success: false,
+        message: 'New password must be at least 6 characters long'
       });
     }
 
     // Find the super admin and include password field
-    const admin = await Admin.findById(req.params.id).select('+password');
+    const admin = await Admin.findById(req.params.id, { includePassword: true });
 
     if (!admin) {
       return res.status(404).json({ success: false, message: 'Super admin not found' });
@@ -852,139 +836,27 @@ exports.updateAdminPassword = async (req, res) => {
     // Verify current password
     const isPasswordCorrect =  await bcrypt.compare(currentPassword, admin.password);
     if (!isPasswordCorrect) {
-      return res.status(401).json({ 
-        success: false, 
-        message: 'Current password is incorrect' 
+      return res.status(401).json({
+        success: false,
+        message: 'Current password is incorrect'
       });
     }
     const hashedPassword = await bcrypt.hash(newPassword,10)
     // Update password
-    admin.password = hashedPassword;
-    await admin.save();
+    const updatedAdmin = await Admin.updateById(req.params.id, { password: hashedPassword });
 
-    res.json({ 
-      success: true, 
+    res.json({
+      success: true,
       message: 'Password updated successfully',
       data: {
-        id: admin._id,
-        username: admin.username,
-        email: admin.email,
-        permission: admin.permissions
+        id: updatedAdmin.id,
+        username: updatedAdmin.username,
+        email: updatedAdmin.email,
+        permission: updatedAdmin.permissions
       }
     });
   } catch (error) {
     res.status(400).json({ success: false, message: error.message });
-  }
-};
-
-
-// @desc    Create Newsletter Email
-// @route   POST /api/superadmin/newsletter-emails
-// @access  Private (Super Admin)
-exports.createNewsletterEmail = async (req, res) => {
-  try {
-    const { email, source } = req.body;
-
-    console.log(req.user._id);
-
-    if (!email) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'Email is required' 
-      });
-    }
-
-    // Check if email already exists
-    const existingEmail = await NewsLetterEmails.findOne({ email: email.toLowerCase().trim() });
-    if (existingEmail) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'This email is already subscribed' 
-      });
-    }
-
-    const newsletterEmail = await NewsLetterEmails.create({
-      email: email.toLowerCase().trim(),
-      source: source || 'manual',
-      isActive: true,
-      createdBy: req.user._id
-    });
-
-    res.status(201).json({
-      success: true,
-      data: newsletterEmail,
-    });
-  } catch (error) {
-    // Handle duplicate key error (unique constraint)
-    if (error.code === 11000) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'This email is already subscribed' 
-      });
-    }
-    res.status(400).json({ success: false, message: error.message });
-  }
-};
-
-// @desc    Update Newsletter Email (toggle active status or update other fields)
-// @route   PUT /api/superadmin/newsletter-emails/:id
-// @access  Private (Super Admin)
-exports.updateNewsletterEmail = async (req, res) => {
-  try {
-    const { isActive, source } = req.body;
-    const newsletterEmail = await NewsLetterEmails.findById(req.params.id);
-
-    if (!newsletterEmail) {
-      return res.status(404).json({ success: false, message: 'Newsletter email not found' });
-    }
-
-    if (isActive !== undefined) {
-      newsletterEmail.isActive = isActive;
-    }
-
-    if (source !== undefined) {
-      newsletterEmail.source = source;
-    }
-
-    await newsletterEmail.save();
-
-    res.json({ success: true, data: newsletterEmail });
-  } catch (error) {
-    res.status(400).json({ success: false, message: error.message });
-  }
-};
-
-// @desc    Delete Newsletter Email
-// @route   DELETE /api/superadmin/newsletter-emails/:id
-// @access  Private (Super Admin)
-exports.deleteNewsletterEmail = async (req, res) => {
-  try {
-    const newsletterEmail = await NewsLetterEmails.findByIdAndDelete(req.params.id);
-
-    if (!newsletterEmail) {
-      return res.status(404).json({ success: false, message: 'Newsletter email not found' });
-    }
-
-    res.json({ success: true, message: 'Newsletter email deleted successfully' });
-  } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
-  }
-};
-
-// @desc    Get Newsletter Email by ID
-// @route   GET /api/superadmin/newsletter-emails/:id
-// @access  Private (Super Admin)
-exports.getNewsletterEmailById = async (req, res) => {
-  try {
-    const newsletterEmail = await NewsLetterEmails.findById(req.params.id);
-
-    if (!newsletterEmail) {
-      return res.status(404).json({ success: false, message: 'Newsletter email not found' });
-    }
-
-    res.json({ success: true, data: newsletterEmail });
-  } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
   }
 };
 
@@ -994,7 +866,7 @@ exports.getNewsletterEmailById = async (req, res) => {
 // @access  Private (Super Admin)
 exports.getFAQs = async (req, res) => {
   try {
-    const faqs = await FAQ.find().sort({ order: 1, createdAt: -1 });
+    const faqs = await FAQ.findAll();
     res.json({ success: true, data: faqs });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
@@ -1008,9 +880,9 @@ exports.createFAQ = async (req, res) => {
   try {
     const { question, answer, category, isActive} = req.body;
     if (!question || !answer) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'Question and answer are required' 
+      return res.status(400).json({
+        success: false,
+        message: 'Question and answer are required'
       });
     }
 
@@ -1019,7 +891,7 @@ exports.createFAQ = async (req, res) => {
       answer,
       category: category || 'general',
       isActive: isActive !== undefined ? isActive : true,
-      createdBy: req.user._id,
+      createdBy: req.user.id,
     });
 
     res.status(201).json({
@@ -1036,7 +908,7 @@ exports.createFAQ = async (req, res) => {
 // @access  Private (Super Admin)
 exports.updateFAQ = async (req, res) => {
   try {
-    const { question, answer, category, isActive, order } = req.body;
+    const { question, answer, category, isActive } = req.body;
 
     const faq = await FAQ.findById(req.params.id);
 
@@ -1044,15 +916,15 @@ exports.updateFAQ = async (req, res) => {
       return res.status(404).json({ success: false, message: 'FAQ not found' });
     }
 
-    if (question !== undefined) faq.question = question;
-    if (answer !== undefined) faq.answer = answer;
-    if (category !== undefined) faq.category = category;
-    if (isActive !== undefined) faq.isActive = isActive;
-    if (order !== undefined) faq.order = order;
+    const updates = {};
+    if (question !== undefined) updates.question = question;
+    if (answer !== undefined) updates.answer = answer;
+    if (category !== undefined) updates.category = category;
+    if (isActive !== undefined) updates.isActive = isActive;
 
-    await faq.save();
+    const updatedFAQ = await FAQ.updateById(req.params.id, updates);
 
-    res.json({ success: true, data: faq });
+    res.json({ success: true, data: updatedFAQ });
   } catch (error) {
     res.status(400).json({ success: false, message: error.message });
   }
@@ -1063,11 +935,13 @@ exports.updateFAQ = async (req, res) => {
 // @access  Private (Super Admin)
 exports.deleteFAQ = async (req, res) => {
   try {
-    const faq = await FAQ.findByIdAndDelete(req.params.id);
+    const faq = await FAQ.findById(req.params.id);
 
     if (!faq) {
       return res.status(404).json({ success: false, message: 'FAQ not found' });
     }
+
+    await FAQ.deleteById(req.params.id);
 
     res.json({ success: true, message: 'FAQ deleted successfully' });
   } catch (error) {
@@ -1096,15 +970,15 @@ exports.createNewsletter = async (req, res) => {
         imageUrl = result.secure_url;
         publicId = result.public_id;
       } catch (uploadError) {
-        return res.status(400).json({ 
-          success: false, 
-          message: `Failed to upload image: ${uploadError.message}` 
+        return res.status(400).json({
+          success: false,
+          message: `Failed to upload image: ${uploadError.message}`
         });
       }
     } else {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'Newsletter image is required' 
+      return res.status(400).json({
+        success: false,
+        message: 'Newsletter image is required'
       });
     }
 
@@ -1114,7 +988,7 @@ exports.createNewsletter = async (req, res) => {
       imageUrl,
       publicId,
       isActive: isActive !== undefined ? isActive : true,
-      createdBy: req.user._id,
+      createdBy: req.user.id,
     });
 
     res.status(201).json({
@@ -1131,9 +1005,7 @@ exports.createNewsletter = async (req, res) => {
 // @access  Private (Super Admin)
 exports.getNewsletters = async (req, res) => {
   try {
-    const newsletters = await NewsLetters.find()
-      .populate('createdBy', 'username email')
-      .sort({ createdAt: -1 });
+    const newsletters = await NewsLetters.findAll();
     res.json({ success: true, data: newsletters });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
@@ -1151,6 +1023,8 @@ exports.updateNewsletter = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Newsletter not found' });
     }
 
+    const updates = {};
+
     // Handle image upload if provided
     if (req.file) {
       try {
@@ -1161,26 +1035,26 @@ exports.updateNewsletter = async (req, res) => {
 
         // Upload new image to Cloudinary
         const result = await uploadToCloudinary(req.file.buffer, 'newsletters');
-        newsletter.imageUrl = result.secure_url;
-        newsletter.publicId = result.public_id;
+        updates.imageUrl = result.secure_url;
+        updates.publicId = result.public_id;
       } catch (uploadError) {
-        return res.status(400).json({ 
-          success: false, 
-          message: `Failed to upload image: ${uploadError.message}` 
+        return res.status(400).json({
+          success: false,
+          message: `Failed to upload image: ${uploadError.message}`
         });
       }
     }
 
     // Update other fields from req.body
     const { title, description, isActive } = req.body;
-    
-    if (title !== undefined) newsletter.title = title;
-    if (description !== undefined) newsletter.description = description;
-    if (isActive !== undefined) newsletter.isActive = isActive;
 
-    await newsletter.save();
+    if (title !== undefined) updates.title = title;
+    if (description !== undefined) updates.description = description;
+    if (isActive !== undefined) updates.isActive = isActive;
 
-    res.json({ success: true, data: newsletter });
+    const updatedNewsletter = await NewsLetters.updateById(req.params.id, updates);
+
+    res.json({ success: true, data: updatedNewsletter });
   } catch (error) {
     res.status(400).json({ success: false, message: error.message });
   }
@@ -1207,7 +1081,7 @@ exports.deleteNewsletter = async (req, res) => {
       }
     }
 
-    await newsletter.deleteOne();
+    await NewsLetters.deleteById(req.params.id);
 
     res.json({ success: true, message: 'Newsletter deleted successfully' });
   } catch (error) {
@@ -1221,37 +1095,12 @@ exports.deleteNewsletter = async (req, res) => {
 exports.getNewsletterEmails = async (req, res) => {
   try {
     const { search, source, isActive } = req.query;
-    let query = {};
 
-    // Filter by source if provided
-    if (source) {
-      query.source = source;
-    }
-
-    // Filter by isActive if provided
-    if (isActive !== undefined) {
-      query.isActive = isActive === 'true';
-    }
-
-    // Search filter (case-insensitive search on email and source)
-    // Combine with existing filters using $and
-    if (search) {
-      const searchCondition = {
-        $or: [
-          { email: { $regex: search, $options: 'i' } },
-          { source: { $regex: search, $options: 'i' } },
-        ]
-      };
-      
-      // If there are existing filters, use $and to combine them
-      if (Object.keys(query).length > 0) {
-        query = { $and: [query, searchCondition] };
-      } else {
-        query = searchCondition;
-      }
-    }
-
-    const newsletterEmails = await NewsLetterEmails.find(query).sort({ createdAt: -1 });
+    const newsletterEmails = await NewsLetterEmails.findAll({
+      search,
+      source,
+      isActive: isActive !== undefined ? isActive === 'true' : undefined,
+    });
 
     res.json({ success: true, data: newsletterEmails });
   } catch (error) {
@@ -1266,26 +1115,26 @@ exports.createNewsletterEmail = async (req, res) => {
   try {
     const { email, source } = req.body;
 
-    if (!req.user || !req.user._id) {
-      return res.status(401).json({ 
-        success: false, 
-        message: 'User not authenticated' 
+    if (!req.user || !req.user.id) {
+      return res.status(401).json({
+        success: false,
+        message: 'User not authenticated'
       });
     }
 
     if (!email) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'Email is required' 
+      return res.status(400).json({
+        success: false,
+        message: 'Email is required'
       });
     }
 
     // Check if email already exists
-    const existingEmail = await NewsLetterEmails.findOne({ email: email.toLowerCase().trim() });
+    const existingEmail = await NewsLetterEmails.findByEmail(email.toLowerCase().trim());
     if (existingEmail) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'This email is already subscribed' 
+      return res.status(400).json({
+        success: false,
+        message: 'This email is already subscribed'
       });
     }
 
@@ -1293,8 +1142,6 @@ exports.createNewsletterEmail = async (req, res) => {
       email: email.toLowerCase().trim(),
       source: source || 'manual',
       isActive: true,
-      createdBy: req.user._id,
-      createdByModel: 'Admin',
     });
 
     res.status(201).json({
@@ -1303,10 +1150,10 @@ exports.createNewsletterEmail = async (req, res) => {
     });
   } catch (error) {
     // Handle duplicate key error (unique constraint)
-    if (error.code === 11000) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'This email is already subscribed' 
+    if (error.code === 'ER_DUP_ENTRY') {
+      return res.status(400).json({
+        success: false,
+        message: 'This email is already subscribed'
       });
     }
     res.status(400).json({ success: false, message: error.message });
@@ -1325,17 +1172,13 @@ exports.updateNewsletterEmail = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Newsletter email not found' });
     }
 
-    if (isActive !== undefined) {
-      newsletterEmail.isActive = isActive;
-    }
+    const updates = {};
+    if (isActive !== undefined) updates.isActive = isActive;
+    if (source !== undefined) updates.source = source;
 
-    if (source !== undefined) {
-      newsletterEmail.source = source;
-    }
+    const updatedNewsletterEmail = await NewsLetterEmails.updateById(req.params.id, updates);
 
-    await newsletterEmail.save();
-
-    res.json({ success: true, data: newsletterEmail });
+    res.json({ success: true, data: updatedNewsletterEmail });
   } catch (error) {
     res.status(400).json({ success: false, message: error.message });
   }
@@ -1346,11 +1189,13 @@ exports.updateNewsletterEmail = async (req, res) => {
 // @access  Private (Super Admin)
 exports.deleteNewsletterEmail = async (req, res) => {
   try {
-    const newsletterEmail = await NewsLetterEmails.findByIdAndDelete(req.params.id);
+    const newsletterEmail = await NewsLetterEmails.findById(req.params.id);
 
     if (!newsletterEmail) {
       return res.status(404).json({ success: false, message: 'Newsletter email not found' });
     }
+
+    await NewsLetterEmails.deleteById(req.params.id);
 
     res.json({ success: true, message: 'Newsletter email deleted successfully' });
   } catch (error) {
@@ -1377,7 +1222,7 @@ exports.getNewsletterEmailById = async (req, res) => {
 
 exports.getContacts = async (req, res) => {
   try {
-    const contacts = await Contact.find().sort({ createdAt: -1 });
+    const contacts = await Contact.findAll();
     res.status(200).json({ success: true, data: contacts });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
@@ -1396,7 +1241,7 @@ function isOTPExpired(createdAt){
 
 exports.checkEmail = async(req,res)=>{
   try {
-    const data = await Admin.findOne({email: req.body.email})
+    const data = await Admin.findByEmail(req.body.email);
     if(!data){
       return res.status(401).json({success: false, message: "Email with this account does not exist."})
     }
@@ -1407,10 +1252,7 @@ exports.checkEmail = async(req,res)=>{
       `Your otp code is ${otp} and do remember otp will expire after 10 minutes.`
     );
          if(response){
-          const Data = await Admin.findByIdAndUpdate(
-            {_id: data._id},
-            {$set: {otp: otp}},
-             {new: true});
+          await Admin.setOtpByEmail(req.body.email, otp);
           res.status(200).json({success: true, message: "OTP sent successfully. Please check your email."})
          } else {
           res.status(500).json({success: false, message: "Failed to send OTP. Please try again."})
@@ -1421,19 +1263,16 @@ exports.checkEmail = async(req,res)=>{
 }
 exports.verifyOtp = async(req,res)=>{
   try {
-      let user = await Admin.findOne({otp: req.body.otp});
+      let user = await Admin.findByOtp(req.body.otp);
       if(!user){
         return res.status(400).json({success:false, message: "Code not found"})
       }else{
-         
+
          const isExpired = isOTPExpired(user.updatedAt);
           if(isExpired){
-               res.status(400).json({success:false, message: "Your otp is expired"})
+               return res.status(400).json({success:false, message: "Your otp is expired"})
           }else{
-              const Data = await Admin.findByIdAndUpdate(
-                  {_id: user._id},
-                  {$set: {otp: 0}},
-                  {new: true}).select("-password");
+              await Admin.clearOtpById(user.id);
      res.status(200).json({success: true, message:"account verified successfully"});
           }
           }
@@ -1452,55 +1291,53 @@ exports.changePasswordWithOTP = async (req, res) => {
 
     // Validate required fields
     if (!email || !newPassword) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'Email and new password are required' 
+      return res.status(400).json({
+        success: false,
+        message: 'Email and new password are required'
       });
     }
 
     // Validate new password length
     if (newPassword.length < 6) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'New password must be at least 6 characters long' 
+      return res.status(400).json({
+        success: false,
+        message: 'New password must be at least 6 characters long'
       });
     }
 
     // Find the admin by email
-    const admin = await Admin.findOne({ email: email.toLowerCase().trim() }).select('+password');
+    const admin = await Admin.findByEmail(email.toLowerCase().trim(), { includePassword: true });
 
     if (!admin) {
-      return res.status(404).json({ 
-        success: false, 
-        message: 'Admin not found' 
+      return res.status(404).json({
+        success: false,
+        message: 'Admin not found'
       });
     }
 
     // Verify that OTP was verified (OTP should be 0 after verification)
     if (admin.otp !== 0) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'Please verify OTP first' 
+      return res.status(400).json({
+        success: false,
+        message: 'Please verify OTP first'
       });
     }
 
     // Hash the new password
     const hashedPassword = await bcrypt.hash(newPassword, 10);
-    
-    // Update password and reset OTP
-    admin.password = hashedPassword;
-    admin.otp = null;
-    await admin.save();
 
-    res.json({ 
-      success: true, 
+    // Update password and reset OTP
+    await Admin.updateById(admin.id, { password: hashedPassword, otp: null });
+
+    res.json({
+      success: true,
       message: 'Password updated successfully'
     });
   } catch (error) {
     console.log(error.message);
-    res.status(500).json({ 
-      success: false, 
-      message: 'Internal server error' 
+    res.status(500).json({
+      success: false,
+      message: 'Internal server error'
     });
   }
 };

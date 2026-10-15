@@ -20,28 +20,14 @@ const getCompanyId = (user) => {
   if (!user || !user.company) {
     return null;
   }
-  
-  // If company is populated (object), get _id
-  if (user.company._id) {
-    return user.company._id;
-  }
-  
-  // If it's an ObjectId or string, return as is
   return user.company;
 };
 
 // Helper function to get company name
 const getCompanyName = (user) => {
-  if (!user || !user.company) {
+  if (!user) {
     return null;
   }
-  
-  // If company is populated (object), get companyName
-  if (user.company.companyName) {
-    return user.company.companyName;
-  }
-  
-  // Fallback to user's companyName field
   return user.companyName || null;
 };
 
@@ -56,7 +42,11 @@ exports.login = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Please provide email and password' });
     }
 
-    const employee = await Employee.findOne({ email }).select('+password')
+    const employee = await Employee.findByEmail(email, { includePassword: true });
+
+    if (!employee) {
+      return res.status(401).json({ success: false, message: 'Invalid email or password' });
+    }
 
     const isMatch = await bcrypt.compare(password, employee.password)
     console.log(isMatch)
@@ -64,23 +54,19 @@ exports.login = async (req, res) => {
       return res.status(401).json({ success: false, message: 'Invalid email or password' });
     }
 
-    // if (!employee || !(await employee.comparePassword(password))) {
-    //   return res.status(401).json({ success: false, message: 'Invalid credentials' });
-    // }
-
     if (!employee.isActive) {
       return res.status(401).json({ success: false, message: 'Account is deactivated' });
     }
 
-    const token = generateToken(employee._id, 'employee');
+    const token = generateToken(employee.id, 'employee');
 
-    const company = await Company.findById(employee.company).select('aiApiEnabled');
+    const company = await Company.findById(employee.company);
 
     res.json({
       success: true,
       token,
       user: {
-        id: employee._id,
+        id: employee.id,
         name: employee.name,
         email: employee.email,
         company: employee.company,
@@ -103,12 +89,13 @@ exports.verifyCustomer = async (req, res) => {
 
     let customer;
     if (phone) {
-      customer = await Customer.findOne({ phone });
+      customer = await Customer.findByPhone(phone);
     } else if (qrData) {
       // QR data could be customer ID or phone
-      customer = await Customer.findOne({
-        $or: [{ _id: qrData }, { phone: qrData }],
-      });
+      customer = await Customer.findById(qrData);
+      if (!customer) {
+        customer = await Customer.findByPhone(qrData);
+      }
     } else {
       return res.status(400).json({ success: false, message: 'Please provide phone or QR data' });
     }
@@ -122,20 +109,16 @@ exports.verifyCustomer = async (req, res) => {
     if (!companyId) {
       return res.status(400).json({ success: false, message: 'Employee is not associated with a company' });
     }
-    const companyIdString = companyId.toString();
-    const companyLink = customer.linkedCompanies.find(
-      (link) => {
-        const linkCompanyId = link.company?._id?.toString() || link.company?.toString() || '';
-        return linkCompanyId === companyIdString;
-      }
-    );
+
+    const linkedCompanies = await Customer.getLinkedCompanies(customer.id);
+    const companyLink = linkedCompanies.find((link) => String(link.company) === String(companyId));
 
     if (!companyLink) {
       return res.status(403).json({
         success: false,
         message: 'Customer is not linked to your company',
         customer: {
-          id: customer._id,
+          id: customer.id,
           username: customer.username,
           email: customer.email,
           phone: customer.phone,
@@ -143,29 +126,23 @@ exports.verifyCustomer = async (req, res) => {
         },
       });
     }
-    // Populate linked companies to get company details
-    await customer.populate('linkedCompanies.company', 'companyName _id redeem_points');
-    console.log(customer);
+
     // Map linked companies to include id, name and redeem points
-    const linkedCompaniesData = customer.linkedCompanies.map(link => {
-      const companyId = link.company?._id?.toString() || link.company?.toString() || '';
-      const companyName = link.companyName || link.company?.companyName || '';
-      return {
-        id: companyId,
-        name: companyName,
-        redeem_points: link.redeem_points || 0,
-      };
-    });
-    
+    const linkedCompaniesData = linkedCompanies.map((link) => ({
+      id: link.company,
+      name: link.companyName,
+      redeem_points: link.redeem_points || 0,
+    }));
+
     res.json({
       success: true,
       customer: {
-        id: customer._id,
+        id: customer.id,
         username: customer.username,
         email: customer.email,
         phone: customer.phone,
         totalPoints: customer.totalPoints,
-        // Points specific to this company from the linkedCompanies array
+        // Points specific to this company from the linked companies
         companyPoints: companyLink?.redeem_points || 0,
         tierPoints: companyLink.tier_points || 0,
         isLinked: true,
@@ -212,13 +189,9 @@ exports.addRedeemPoints = async (req, res) => {
     if (!companyId) {
       return res.status(400).json({ success: false, message: 'Employee is not associated with a company' });
     }
-    const companyIdString = companyId.toString();
-    const companyLink = customer.linkedCompanies.find(
-      (link) => {
-        const linkCompanyId = link.company?._id?.toString() || link.company?.toString() || '';
-        return linkCompanyId === companyIdString;
-      }
-    );
+
+    const linkedCompanies = await Customer.getLinkedCompanies(customer.id);
+    const companyLink = linkedCompanies.find((link) => String(link.company) === String(companyId));
 
     if (!companyLink) {
       return res.status(403).json({ success: false, message: 'Customer is not linked to your company' });
@@ -229,33 +202,25 @@ exports.addRedeemPoints = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Invalid transaction type. Must be "earn" or "redeem"' });
     }
 
-    // Calculate points (you can adjust the conversion rate)
-    //const points = Math.floor(amount || 0);
-
     // For redeem, ensure customer has enough points
     if (type === 'redeem' && companyLink.redeem_points < points) {
-      return res.status(400).json({ 
-        success: false, 
-        message: `Insufficient points. Customer has ${companyLink.redeem_points} points, but trying to redeem ${points} points` 
+      return res.status(400).json({
+        success: false,
+        message: `Insufficient points. Customer has ${companyLink.redeem_points} points, but trying to redeem ${points} points`
       });
     }
-
-    // New balance after this transaction (for information / debugging if needed)
-    const newTotalPoints = type === 'redeem'
-      ? customer.totalPoints - points
-      : customer.totalPoints + points;
 
     // Create transaction
     const companyName = getCompanyName(req.user) || 'Unknown Company';
     const transaction = await Transaction.create({
       transactionId: generateTransactionId(),
-      customer: customer._id,
+      customer: customer.id,
       customerName: customer.username,
       customerEmail: customer.email,
       customerPhone: customer.phone,
       company: companyId,
       companyName: companyName,
-      employee: req.user._id,
+      employee: req.user.id,
       employeeName: req.user.name,
       type,
       // Store the actual transaction points, not the running total
@@ -268,20 +233,26 @@ exports.addRedeemPoints = async (req, res) => {
     });
 
     // Update customer points based on transaction type
+    let newTotalPoints;
+    let newCompanyRedeemPoints;
+    let newCompanyTierPoints = companyLink.tier_points;
+
     if (type === 'redeem') {
-      customer.totalPoints -= points;
-      companyLink.redeem_points -= points; 
-      // Track redeemed points per company in linkedCompanies
-      
+      newTotalPoints = customer.totalPoints - points;
+      newCompanyRedeemPoints = companyLink.redeem_points - points;
     } else {
-      customer.totalPoints += points;
-      companyLink.redeem_points += points; 
-      companyLink.tier_points +=points;
-      console.log(companyLink.tier_points);
+      newTotalPoints = customer.totalPoints + points;
+      newCompanyRedeemPoints = companyLink.redeem_points + points;
+      newCompanyTierPoints = companyLink.tier_points + points;
+      console.log(newCompanyTierPoints);
     }
 
-    await customer.save();
-    
+    await Customer.updateById(customer.id, { totalPoints: newTotalPoints });
+    await Customer.updateLinkedCompanyPoints(customer.id, companyId, {
+      redeemPoints: newCompanyRedeemPoints,
+      tierPoints: newCompanyTierPoints,
+    });
+
     res.status(201).json({
       success: true,
       data: transaction,
@@ -301,13 +272,11 @@ exports.getRedeemHistory = async (req, res) => {
     if (!companyId) {
       return res.status(400).json({ success: false, message: 'Employee is not associated with a company' });
     }
-    
-    const transactions = await Transaction.find({
-      employee: req.user._id,
-      company: companyId,
-    })
-      .populate('customer', 'username email phone')
-      .sort({ createdAt: -1 });
+
+    const transactions = await Transaction.findAll({
+      employeeId: req.user.id,
+      companyId,
+    });
 
     res.json({ success: true, data: transactions });
   } catch (error) {
@@ -323,55 +292,32 @@ exports.registerFCMToken = async (req, res) => {
     const { token, deviceType = 'mobile' } = req.body;
 
     if (!token) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'FCM token is required' 
+      return res.status(400).json({
+        success: false,
+        message: 'FCM token is required'
       });
     }
 
     if (!['mobile', 'web'].includes(deviceType)) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'Device type must be "mobile" or "web"' 
+      return res.status(400).json({
+        success: false,
+        message: 'Device type must be "mobile" or "web"'
       });
     }
 
-    const employee = await Employee.findById(req.user._id);
+    const employee = await Employee.findById(req.user.id);
 
     if (!employee) {
       return res.status(404).json({ success: false, message: 'Employee not found' });
     }
 
-    // Initialize fcmTokens array if it doesn't exist
-    if (!employee.fcmTokens) {
-      employee.fcmTokens = [];
-    }
-
-    // Check if token already exists
-    const existingTokenIndex = employee.fcmTokens.findIndex(
-      (fcmTokenObj) => fcmTokenObj.token === token
-    );
-
-    if (existingTokenIndex !== -1) {
-      // Update existing token
-      employee.fcmTokens[existingTokenIndex].deviceType = deviceType;
-      employee.fcmTokens[existingTokenIndex].updatedAt = new Date();
-    } else {
-      // Add new token
-      employee.fcmTokens.push({
-        token,
-        deviceType,
-        updatedAt: new Date(),
-      });
-    }
-
-    await employee.save();
+    const tokens = await Employee.upsertFcmToken(req.user.id, token, deviceType);
 
     res.json({
       success: true,
       message: 'FCM token registered successfully',
       data: {
-        tokenCount: employee.fcmTokens.length,
+        tokenCount: tokens.length,
       },
     });
   } catch (error) {
@@ -387,25 +333,19 @@ exports.removeFCMToken = async (req, res) => {
     const { token } = req.body;
 
     if (!token) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'FCM token is required' 
+      return res.status(400).json({
+        success: false,
+        message: 'FCM token is required'
       });
     }
 
-    const employee = await Employee.findById(req.user._id);
+    const employee = await Employee.findById(req.user.id);
 
     if (!employee) {
       return res.status(404).json({ success: false, message: 'Employee not found' });
     }
 
-    // Remove token if it exists
-    if (employee.fcmTokens) {
-      employee.fcmTokens = employee.fcmTokens.filter(
-        (fcmTokenObj) => fcmTokenObj.token !== token
-      );
-      await employee.save();
-    }
+    await Employee.removeFcmToken(req.user.id, token);
 
     res.json({
       success: true,
@@ -424,20 +364,20 @@ exports.updatePassword = async (req, res) => {
     const { currentPassword, newPassword } = req.body;
 
     if (!currentPassword || !newPassword) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'Please provide both current password and new password' 
+      return res.status(400).json({
+        success: false,
+        message: 'Please provide both current password and new password'
       });
     }
 
     if (newPassword.length < 6) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'New password must be at least 6 characters long' 
+      return res.status(400).json({
+        success: false,
+        message: 'New password must be at least 6 characters long'
       });
     }
 
-    const employee = await Employee.findById(req.user._id).select('+password');
+    const employee = await Employee.findById(req.user.id, { includePassword: true });
 
     if (!employee) {
       return res.status(404).json({ success: false, message: 'Employee not found' });
@@ -446,16 +386,15 @@ exports.updatePassword = async (req, res) => {
     // Verify current password
     const isMatch = await bcrypt.compare(currentPassword, employee.password);
     if (!isMatch) {
-      return res.status(401).json({ 
-        success: false, 
-        message: 'Current password is incorrect' 
+      return res.status(401).json({
+        success: false,
+        message: 'Current password is incorrect'
       });
     }
 
     // Hash and update password
     const hashedPassword = await bcrypt.hash(newPassword, 10);
-    employee.password = hashedPassword;
-    await employee.save();
+    await Employee.updateById(req.user.id, { password: hashedPassword });
 
     res.json({
       success: true,
@@ -473,21 +412,15 @@ exports.uploadBanner = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Please upload an image' });
     }
 
-    // Debug logging
-    // console.log('Upload Banner - Request body:', req.body);
-    // console.log('Upload Banner - User:', req.user ? { id: req.user._id, company: req.user.company } : 'No user');
-    // console.log('Upload Banner - Company from user:', req.user?.company?._id || req.user?.company);
-    // console.log('Upload Banner - CreatedBy from body:', req.body.createdBy);
-
     // Get company ID from authenticated employee (more secure than trusting frontend)
-    const companyId = req.user?.company?._id || req.user?.company || req.body.createdBy;
-    
+    const companyId = req.user?.company || req.body.createdBy;
+
     console.log('Upload Banner - Final companyId:', companyId);
-    
+
     if (!companyId) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'Company ID is missing. Please ensure you are logged in with a valid company account.' 
+      return res.status(400).json({
+        success: false,
+        message: 'Company ID is missing. Please ensure you are logged in with a valid company account.'
       });
     }
 
@@ -500,9 +433,9 @@ exports.uploadBanner = async (req, res) => {
       imageUrl = result.secure_url;
       publicId = result.public_id;
     } catch (uploadError) {
-      return res.status(400).json({ 
-        success: false, 
-        message: `Failed to upload image: ${uploadError.message}` 
+      return res.status(400).json({
+        success: false,
+        message: `Failed to upload image: ${uploadError.message}`
       });
     }
 
@@ -537,7 +470,7 @@ exports.uploadBanner = async (req, res) => {
 // @access  Private (Employee)
 exports.getBanners = async (req, res) => {
   try {
-    const banners = await Banner.find({createdBy: req.params.id}).sort({ createdAt: -1 });
+    const banners = await Banner.findAll({ createdBy: req.params.id });
     res.json({ success: true, data: banners });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
@@ -545,8 +478,8 @@ exports.getBanners = async (req, res) => {
 };
 
 // @desc    Update Banner
-// @route   PUT /api/admin/banners/:id
-// @access  Private (Admin with manageBanners permission)
+// @route   PUT /api/employee/banners/:id
+// @access  Private (Employee)
 exports.updateBanner = async (req, res) => {
   try {
     const banner = await Banner.findById(req.params.id);
@@ -555,6 +488,8 @@ exports.updateBanner = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Banner not found' });
     }
 
+    const updates = {};
+
     // Upload new image if provided
     if (req.file) {
       try {
@@ -562,45 +497,45 @@ exports.updateBanner = async (req, res) => {
         if (banner.public_id) {
           await deleteFromCloudinary(banner.public_id);
         }
-        
+
         // Upload new image
         const result = await uploadToCloudinary(req.file.buffer, 'banners');
-        banner.imageUrl = result.secure_url;
-        banner.public_id = result.public_id;
+        updates.imageUrl = result.secure_url;
+        updates.public_id = result.public_id;
       } catch (uploadError) {
-        return res.status(400).json({ 
-          success: false, 
-          message: `Failed to upload image: ${uploadError.message}` 
+        return res.status(400).json({
+          success: false,
+          message: `Failed to upload image: ${uploadError.message}`
         });
       }
     }
 
     // Update fields - use !== undefined to allow empty strings to clear fields
-    if (req.body.title !== undefined) banner.title = req.body.title;
-    if (req.body.description !== undefined) banner.description = req.body.description;
-    if (req.body.badge !== undefined) banner.badge = req.body.badge;
+    if (req.body.title !== undefined) updates.title = req.body.title;
+    if (req.body.description !== undefined) updates.description = req.body.description;
+    if (req.body.badge !== undefined) updates.badge = req.body.badge;
     if (req.body.points !== undefined) {
       // Convert points to number if it's a string
-      banner.points = typeof req.body.points === 'string' ? parseInt(req.body.points) || 0 : req.body.points;
+      updates.points = typeof req.body.points === 'string' ? parseInt(req.body.points) || 0 : req.body.points;
     }
-    if (req.body.productUrl !== undefined) banner.productUrl = req.body.productUrl;
-    if (req.body.startDate !== undefined) banner.startDate = req.body.startDate;
-    if (req.body.endDate !== undefined) banner.endDate = req.body.endDate;
-    if (req.body.type !== undefined) banner.type = req.body.type;
-    if (req.body.language !== undefined) banner.language = req.body.language;
+    if (req.body.productUrl !== undefined) updates.productUrl = req.body.productUrl;
+    if (req.body.startDate !== undefined) updates.startDate = req.body.startDate;
+    if (req.body.endDate !== undefined) updates.endDate = req.body.endDate;
+    if (req.body.type !== undefined) updates.type = req.body.type;
+    if (req.body.language !== undefined) updates.language = req.body.language;
 
-    if (req.body.isActive !== undefined) banner.isActive = req.body.isActive === 'true' || req.body.isActive === true;
+    if (req.body.isActive !== undefined) updates.isActive = req.body.isActive === 'true' || req.body.isActive === true;
 
-    await banner.save();
-    res.json({ success: true, data: banner });
+    const updatedBanner = await Banner.updateById(req.params.id, updates);
+    res.json({ success: true, data: updatedBanner });
   } catch (error) {
     res.status(400).json({ success: false, message: error.message });
   }
 };
 
 // @desc    Delete Banner
-// @route   DELETE /api/admin/banners/:id
-// @access  Private (Admin with manageBanners permission)
+// @route   DELETE /api/employee/banners/:id
+// @access  Private (Employee)
 exports.deleteBanner = async (req, res) => {
   try {
     const banner = await Banner.findById(req.params.id);
@@ -609,7 +544,7 @@ exports.deleteBanner = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Banner not found' });
     }
 
-    await banner.deleteOne();
+    await Banner.deleteById(req.params.id);
 
     res.json({ success: true, message: 'Banner deleted successfully' });
   } catch (error) {
@@ -627,7 +562,7 @@ exports.uploadProduct = async (req, res) => {
     }
 
     const result = await uploadToCloudinary(req.file.buffer, 'products');
-     
+
     const product = await Product.create({
       name: req.body.name,
       description: req.body.description,
@@ -652,7 +587,7 @@ exports.uploadProduct = async (req, res) => {
 // @access  Private (Company)
 exports.getProductsFromCompany = async (req, res) => {
   try {
-    const products = await Product.find({ company: req.params.id }).sort({ createdAt: -1 });
+    const products = await Product.findAll({ company: req.params.id });
     res.json({ success: true, data: products });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
@@ -663,7 +598,7 @@ exports.getProductsFromCompany = async (req, res) => {
 // @access  Private (Company)
 exports.updateProduct = async (req, res) => {
   try {
-    const product = await Product.findOne({_id: req.params.id});
+    const product = await Product.findById(req.params.id);
     if (!product) {
       return res.status(404).json({ success: false, message: 'Product not found' });
     }
@@ -672,10 +607,12 @@ exports.updateProduct = async (req, res) => {
     if (!companyId) {
       return res.status(400).json({ success: false, message: 'Employee is not associated with a company' });
     }
-    
-    if (product.company.toString() !== companyId.toString()) {
+
+    if (String(product.company) !== String(companyId)) {
       return res.status(403).json({ success: false, message: 'Not authorized' });
     }
+
+    const updates = { ...req.body };
 
     if (req.file) {
       // Delete old image
@@ -686,13 +623,12 @@ exports.updateProduct = async (req, res) => {
 
       // Upload new image
       const result = await uploadToCloudinary(req.file.buffer, 'products');
-      product.image = result.secure_url;
+      updates.image = result.secure_url;
     }
 
-    Object.assign(product, req.body);
-    await product.save();
+    const updatedProduct = await Product.updateById(req.params.id, updates);
 
-    res.json({ success: true, data: product });
+    res.json({ success: true, data: updatedProduct });
   } catch (error) {
     console.log(error.message);
     res.status(400).json({ success: false, message: error.message });
@@ -714,8 +650,8 @@ exports.deleteProduct = async (req, res) => {
     if (!companyId) {
       return res.status(400).json({ success: false, message: 'Employee is not associated with a company' });
     }
-    
-    if (product.company.toString() !== companyId.toString()) {
+
+    if (String(product.company) !== String(companyId)) {
       return res.status(403).json({ success: false, message: 'Not authorized' });
     }
 
@@ -725,7 +661,7 @@ exports.deleteProduct = async (req, res) => {
       await deleteFromCloudinary(publicId);
     }
 
-    await product.deleteOne();
+    await Product.deleteById(req.params.id);
 
     res.json({ success: true, message: 'Product deleted successfully' });
   } catch (error) {
@@ -738,47 +674,38 @@ exports.Customers = async (req, res) => {
   try {
     // Get company ID using helper function
     const companyId = getCompanyId(req.user);
-    
+
     // If still no companyId, return error
     if (!companyId) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'Employee is not associated with a company' 
+      return res.status(400).json({
+        success: false,
+        message: 'Employee is not associated with a company'
       });
     }
-    
-    // Convert to string for comparison if needed
-    const companyIdString = companyId.toString();
-    
+
     // Find all customers that are linked to the employee's company
-    const customers = await Customer.find({
-      'linkedCompanies.company': companyId
-    }).populate('linkedCompanies.company', 'companyName _id');
+    const customers = await Customer.findLinkedToCompany(companyId);
 
     // Map customers to include necessary fields
-    const customersData = customers.map(customer => {
+    const customersData = [];
+    for (const customer of customers) {
+      const linkedCompanies = await Customer.getLinkedCompanies(customer.id);
+
       // Find the specific linked company data for this employee's company
-      const linkedCompany = customer.linkedCompanies.find(
-        (link) => {
-          const linkCompanyId = link.company?._id?.toString() || link.company?.toString() || '';
-          return linkCompanyId === companyIdString;
-        }
+      const linkedCompany = linkedCompanies.find(
+        (link) => String(link.company) === String(companyId)
       );
 
       // Map all linked companies, including redeem_points
-      const linkedCompaniesData = customer.linkedCompanies.map(link => {
-        const linkCompanyId = link.company?._id?.toString() || link.company?.toString() || '';
-        const linkCompanyName = link.companyName || link.company?.companyName || '';
-        return {
-          id: linkCompanyId,
-          name: linkCompanyName,
-          redeem_points: link.redeem_points || 0,
-        };
-      });
+      const linkedCompaniesData = linkedCompanies.map((link) => ({
+        id: link.company,
+        name: link.companyName,
+        redeem_points: link.redeem_points || 0,
+      }));
 
-      return {
-        _id: customer._id,
-        id: customer._id,
+      customersData.push({
+        _id: customer.id,
+        id: customer.id,
         username: customer.username,
         name: customer.username,
         email: customer.email,
@@ -792,9 +719,9 @@ exports.Customers = async (req, res) => {
         linkedCompanies: linkedCompaniesData,
         createdAt: customer.createdAt,
         deviceToken: customer.deviceToken || null,
-      };
-    });
-    
+      });
+    }
+
     res.json({
       success: true,
       data: customersData,
@@ -807,10 +734,7 @@ exports.Customers = async (req, res) => {
 
 exports.getQueries = async (req, res) => {
   try {
-    const queries = await Query.find()
-      .populate('customer', 'username email phone')
-      .populate('responses.respondedBy', 'username email')
-      .sort({ createdAt: -1 });
+    const queries = await Query.findAll();
 
     res.json({ success: true, data: queries });
   } catch (error) {
@@ -835,20 +759,17 @@ exports.respondToQuery = async (req, res) => {
     if (!employeeCompanyId) {
       return res.status(400).json({ success: false, message: 'Employee is not associated with a company' });
     }
-    const employeeCompanyIdString = employeeCompanyId.toString();
-    const queryBrandId = query.brandId ? query.brandId.toString() : null;
-    
-    if (queryBrandId && queryBrandId !== employeeCompanyIdString) {
+
+    if (query.brandId && String(query.brandId) !== String(employeeCompanyId)) {
       return res.status(403).json({ success: false, message: 'Not authorized to respond to this query' });
     }
 
-    query.responses.push({
-      respondedBy: req.user._id,
+    const updatedQuery = await Query.addResponse(req.params.id, {
+      respondedBy: req.user.id,
+      responseModel: 'Employee',
       response,
     });
 
-    query.status = 'resolved';
-    await query.save();
     // Send email response to customer
     try {
       await sendEmail(
@@ -861,7 +782,7 @@ exports.respondToQuery = async (req, res) => {
       // Continue even if email fails
     }
 
-    res.json({ success: true, data: query });
+    res.json({ success: true, data: updatedQuery });
   } catch (error) {
     res.status(400).json({ success: false, message: error.message });
   }
@@ -879,7 +800,7 @@ function isOTPExpired(createdAt){
 
 exports.checkEmail = async(req,res)=>{
   try {
-    const data = await Employee.findOne({email: req.body.email})
+    const data = await Employee.findByEmail(req.body.email);
     if(!data){
       return res.status(401).json({message: "Email with this account does not exist."})
     }
@@ -890,11 +811,8 @@ exports.checkEmail = async(req,res)=>{
       `Your otp code is ${otp} and do remember otp will expire after 10 minutes.`
     );
          if(response){
-          const Data = await Employee.findByIdAndUpdate(
-            {_id: data._id},
-            {$set: {otp: otp}},
-             {new: true});
-             res.status(200).json({success: true, message: "OTP sent successfully. Please check your email."})
+          await Employee.setOtpByEmail(req.body.email, otp);
+          res.status(200).json({success: true, message: "OTP sent successfully. Please check your email."})
          }
   } catch (error) {
     res.status(400).json({ success: false, message: error.message });
@@ -902,19 +820,16 @@ exports.checkEmail = async(req,res)=>{
 }
 exports.verifyOtp = async(req,res)=>{
   try {
-      let user = await Employee.findOne({otp: req.body.otp});
+      let user = await Employee.findByOtp(req.body.otp);
       if(!user){
         return res.status(400).json({success:false, message: "Code not found"})
       }else{
-         
+
          const isExpired = isOTPExpired(user.updatedAt);
           if(isExpired){
-               res.status(400).json({success:false, message: "Your otp is expired"})
+               return res.status(400).json({success:false, message: "Your otp is expired"})
           }else{
-              const Data = await Employee.findByIdAndUpdate(
-                  {_id: user._id},
-                  {$set: {otp: 0}},
-                  {new: true}).select("-password");
+              await Employee.clearOtpById(user.id);
      res.status(200).json({success: true, message:"account verified successfully"});
           }
           }
@@ -929,55 +844,53 @@ exports.changePasswordWithOTP = async (req, res) => {
 
     // Validate required fields
     if (!email || !newPassword) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'Email and new password are required' 
+      return res.status(400).json({
+        success: false,
+        message: 'Email and new password are required'
       });
     }
 
     // Validate new password length
     if (newPassword.length < 6) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'New password must be at least 6 characters long' 
+      return res.status(400).json({
+        success: false,
+        message: 'New password must be at least 6 characters long'
       });
     }
 
     // Find the admin by email
-    const employee = await Employee.findOne({ email: email.toLowerCase().trim() }).select('+password');
+    const employee = await Employee.findByEmail(email.toLowerCase().trim(), { includePassword: true });
 
     if (!employee) {
-      return res.status(404).json({ 
-        success: false, 
-        message: 'Admin not found' 
+      return res.status(404).json({
+        success: false,
+        message: 'Admin not found'
       });
     }
 
     // Verify that OTP was verified (OTP should be 0 after verification)
     if (employee.otp !== 0) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'Please verify OTP first' 
+      return res.status(400).json({
+        success: false,
+        message: 'Please verify OTP first'
       });
     }
 
     // Hash the new password
     const hashedPassword = await bcrypt.hash(newPassword, 10);
-    
-    // Update password and reset OTP
-    employee.password = hashedPassword;
-    employee.otp = 0;
-    await employee.save();
 
-    res.json({ 
-      success: true, 
+    // Update password and reset OTP
+    await Employee.updateById(employee.id, { password: hashedPassword, otp: 0 });
+
+    res.json({
+      success: true,
       message: 'Password updated successfully'
     });
   } catch (error) {
     console.log(error.message);
-    res.status(500).json({ 
-      success: false, 
-      message: 'Internal server error' 
+    res.status(500).json({
+      success: false,
+      message: 'Internal server error'
     });
   }
 };
@@ -1087,19 +1000,14 @@ exports.notifications = async (req, res) => {
 };
 exports.getNotifications = async (req, res) => {
   try {
-    // if (!checkPermission(req.user, 'manageNotifications')) {
-    //   return res.status(403).json({ success: false, message: 'You do not have permission to manage notifications' });
-    // }
-
     const companyId = getCompanyId(req.user);
     if (!companyId) {
       return res.status(400).json({ success: false, message: 'Employee is not associated with a company' });
     }
 
-    const notifications = await Notification.find({ company: companyId }).sort({ createdAt: -1 });
+    const notifications = await Notification.findByCompany(companyId);
     res.json({ success: true, data: notifications });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
 };
-

@@ -55,11 +55,7 @@ exports.createReview = async (req, res) => {
 // @access  Public
 exports.getReviews = async (req, res) => {
   try {
-    const reviews = await Review.find()
-      .populate('userId', 'username email')
-      .sort({ createdAt: -1 })
-
-    const total = await Review.countDocuments({ isActive: true });
+    const reviews = await Review.findAll();
 
     res.status(200).json({
       success: true,
@@ -75,8 +71,7 @@ exports.getReviews = async (req, res) => {
 // @access  Public
 exports.getReviewById = async (req, res) => {
   try {
-    const review = await Review.findById(req.params.id)
-      .populate('userId', 'username email');
+    const review = await Review.findById(req.params.id);
 
     if (!review) {
       return res.status(404).json({
@@ -102,19 +97,13 @@ exports.getReviewsByUserId = async (req, res) => {
     const { page = 1, limit = 20 } = req.query;
     const skip = (page - 1) * limit;
 
-    const reviews = await Review.find({
-      userId: req.params.userId,
-      isActive: true,
-    })
-      .populate('userId', 'username email')
-      .sort({ createdAt: -1 })
-      .skip(skip)
-      .limit(parseInt(limit));
+    const reviews = await Review.findByUserId(
+      req.params.userId,
+      { isActive: true },
+      { limit: parseInt(limit), offset: skip }
+    );
 
-    const total = await Review.countDocuments({
-      userId: req.params.userId,
-      isActive: true,
-    });
+    const total = await Review.count({ userId: req.params.userId, isActive: true });
 
     res.json({
       success: true,

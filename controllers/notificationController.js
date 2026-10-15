@@ -2,6 +2,8 @@ const Notification = require('../models/Notification');
 const CustomerNotification = require('../models/CustomerNotification');
 const Customer = require('../models/Customer');
 
+const MOBILE_TYPES = ['mobile', 'both'];
+
 // @desc    Get Notifications for Customer (Mobile App Format)
 // @route   GET /api/notification
 // @access  Private (Customer)
@@ -9,73 +11,38 @@ exports.getNotifications = async (req, res) => {
   try {
     const { page = 1, limit = 20 } = req.query;
     const skip = (page - 1) * limit;
-    const customerId = req.user._id;
+    const customerId = req.user.id;
 
-    // Get customer with linked companies
-    const customer = await Customer.findById(customerId).select('linkedCompanies.company');
-    const linkedCompanyIds = customer.linkedCompanies.map(l => l.company);
-
-    // Build query conditions for notifications
-    const queryConditions = [
-      { target: 'all', isActive: true },
-      { target: 'customers', isActive: true },
-      { target: 'specific', targetIds: customerId, isActive: true },
-    ];
-
-    // Add company condition if customer has linked companies
-    if (linkedCompanyIds.length > 0) {
-      queryConditions.push({
-        target: 'company',
-        company: { $in: linkedCompanyIds },
-        isActive: true,
-      });
-    }
+    // Get customer's linked companies
+    const linkedCompanies = await Customer.getLinkedCompanies(customerId);
+    const linkedCompanyIds = linkedCompanies.map(l => l.company);
 
     // Get notifications for this customer (mobile type only)
-    const notifications = await Notification.find({
-      $and: [
-        { $or: queryConditions },
-        { $or: [{ type: 'mobile' }, { type: 'both' }] },
-      ],
-    })
-      .sort({ createdAt: -1 })
-      .skip(skip)
-      .limit(parseInt(limit));
+    const notifications = await Notification.findForCustomer(customerId, linkedCompanyIds, {
+      limit: parseInt(limit),
+      offset: skip,
+      types: MOBILE_TYPES,
+    });
 
     // Get read status for each notification
-    const notificationIds = notifications.map(n => n._id);
-    const customerNotifications = await CustomerNotification.find({
-      customer: customerId,
-      notification: { $in: notificationIds },
-    });
-
-    // Create a map of notification ID to read status
+    const notificationIds = notifications.map(n => n.id);
     const readStatusMap = {};
-    customerNotifications.forEach(cn => {
-      readStatusMap[cn.notification.toString()] = {
-        isRead: cn.isRead,
-        readAt: cn.readAt,
-      };
-    });
+    for (const notificationId of notificationIds) {
+      const cn = await CustomerNotification.findByCustomerAndNotification(customerId, notificationId);
+      if (cn) {
+        readStatusMap[notificationId] = { isRead: cn.isRead, readAt: cn.readAt };
+      }
+    }
 
     // Format notifications to match mobile app NotificationModel
     const formattedNotifications = notifications.map(notification => {
-      const readStatus = readStatusMap[notification._id.toString()] || { isRead: false };
-      
+      const readStatus = readStatusMap[notification.id] || { isRead: false };
+
       // Parse data if it exists in the notification
-      let data = null;
-      if (notification.data) {
-        try {
-          data = typeof notification.data === 'string' 
-            ? JSON.parse(notification.data) 
-            : notification.data;
-        } catch (e) {
-          data = notification.data;
-        }
-      }
+      let data = notification.data ?? null;
 
       return {
-        id: notification._id.toString(),
+        id: String(notification.id),
         title: notification.title,
         body: notification.message,
         data: data,
@@ -84,12 +51,7 @@ exports.getNotifications = async (req, res) => {
       };
     });
 
-    const total = await Notification.countDocuments({
-      $and: [
-        { $or: queryConditions },
-        { $or: [{ type: 'mobile' }, { type: 'both' }] },
-      ],
-    });
+    const total = await Notification.countForCustomer(customerId, linkedCompanyIds, { types: MOBILE_TYPES });
 
     res.json({
       success: true,
@@ -111,7 +73,7 @@ exports.getNotifications = async (req, res) => {
 // @access  Private (Customer)
 exports.markAsRead = async (req, res) => {
   try {
-    const customerId = req.user._id;
+    const customerId = req.user.id;
     const notificationId = req.params.id;
 
     // Check if notification exists
@@ -124,22 +86,7 @@ exports.markAsRead = async (req, res) => {
     }
 
     // Update or create customer notification record
-    const customerNotification = await CustomerNotification.findOneAndUpdate(
-      {
-        customer: customerId,
-        notification: notificationId,
-      },
-      {
-        customer: customerId,
-        notification: notificationId,
-        isRead: true,
-        readAt: new Date(),
-      },
-      {
-        upsert: true,
-        new: true,
-      }
-    );
+    await CustomerNotification.markReadFor(customerId, notificationId);
 
     res.json({
       success: true,
@@ -159,49 +106,23 @@ exports.markAsRead = async (req, res) => {
 // @access  Private (Customer)
 exports.markAllAsRead = async (req, res) => {
   try {
-    const customerId = req.user._id;
+    const customerId = req.user.id;
 
-    // Get customer with linked companies
-    const customer = await Customer.findById(customerId).select('linkedCompanies.company');
-    const linkedCompanyIds = customer.linkedCompanies.map(l => l.company);
-
-    // Build query conditions
-    const queryConditions = [
-      { target: 'all', isActive: true },
-      { target: 'customers', isActive: true },
-      { target: 'specific', targetIds: customerId, isActive: true },
-    ];
-
-    if (linkedCompanyIds.length > 0) {
-      queryConditions.push({
-        target: 'company',
-        company: { $in: linkedCompanyIds },
-        isActive: true,
-      });
-    }
+    // Get customer's linked companies
+    const linkedCompanies = await Customer.getLinkedCompanies(customerId);
+    const linkedCompanyIds = linkedCompanies.map(l => l.company);
 
     // Get all notifications for this customer (mobile type only)
-    const notifications = await Notification.find({
-      $and: [
-        { $or: queryConditions },
-        { $or: [{ type: 'mobile' }, { type: 'both' }] },
-      ],
+    const notifications = await Notification.findForCustomer(customerId, linkedCompanyIds, {
+      limit: 1000,
+      offset: 0,
+      types: MOBILE_TYPES,
     });
 
-    const notificationIds = notifications.map(n => n._id);
-
     // Mark all as read
-    await CustomerNotification.updateMany(
-      {
-        customer: customerId,
-        notification: { $in: notificationIds },
-      },
-      {
-        isRead: true,
-        readAt: new Date(),
-      },
-      { upsert: true }
-    );
+    for (const notification of notifications) {
+      await CustomerNotification.markReadFor(customerId, notification.id);
+    }
 
     res.json({
       success: true,
@@ -217,48 +138,27 @@ exports.markAllAsRead = async (req, res) => {
 // @access  Private (Customer)
 exports.getUnreadCount = async (req, res) => {
   try {
-    const customerId = req.user._id;
+    const customerId = req.user.id;
 
-    // Get customer with linked companies
-    const customer = await Customer.findById(customerId).select('linkedCompanies.company');
-    const linkedCompanyIds = customer.linkedCompanies.map(l => l.company);
-
-    // Build query conditions
-    const queryConditions = [
-      { target: 'all', isActive: true },
-      { target: 'customers', isActive: true },
-      { target: 'specific', targetIds: customerId, isActive: true },
-    ];
-
-    if (linkedCompanyIds.length > 0) {
-      queryConditions.push({
-        target: 'company',
-        company: { $in: linkedCompanyIds },
-        isActive: true,
-      });
-    }
+    // Get customer's linked companies
+    const linkedCompanies = await Customer.getLinkedCompanies(customerId);
+    const linkedCompanyIds = linkedCompanies.map(l => l.company);
 
     // Get all notifications for this customer (mobile type only)
-    const notifications = await Notification.find({
-      $and: [
-        { $or: queryConditions },
-        { $or: [{ type: 'mobile' }, { type: 'both' }] },
-      ],
+    const notifications = await Notification.findForCustomer(customerId, linkedCompanyIds, {
+      limit: 1000,
+      offset: 0,
+      types: MOBILE_TYPES,
     });
 
-    const notificationIds = notifications.map(n => n._id);
-
     // Count unread notifications
-    const readNotificationIds = await CustomerNotification.find({
-      customer: customerId,
-      notification: { $in: notificationIds },
-      isRead: true,
-    }).select('notification');
-
-    const readIds = readNotificationIds.map(rn => rn.notification.toString());
-    const unreadCount = notificationIds.filter(
-      id => !readIds.includes(id.toString())
-    ).length;
+    let unreadCount = 0;
+    for (const notification of notifications) {
+      const cn = await CustomerNotification.findByCustomerAndNotification(customerId, notification.id);
+      if (!cn || !cn.isRead) {
+        unreadCount += 1;
+      }
+    }
 
     res.json({
       success: true,
@@ -276,14 +176,11 @@ exports.getUnreadCount = async (req, res) => {
 // @access  Private (Customer)
 exports.deleteNotification = async (req, res) => {
   try {
-    const customerId = req.user._id;
+    const customerId = req.user.id;
     const notificationId = req.params.id;
 
     // Remove customer notification record
-    await CustomerNotification.findOneAndDelete({
-      customer: customerId,
-      notification: notificationId,
-    });
+    await CustomerNotification.deleteByCustomerAndNotification(customerId, notificationId);
 
     res.json({
       success: true,
@@ -299,12 +196,10 @@ exports.deleteNotification = async (req, res) => {
 // @access  Private (Customer)
 exports.clearAllNotifications = async (req, res) => {
   try {
-    const customerId = req.user._id;
+    const customerId = req.user.id;
 
     // Remove all customer notification records
-    await CustomerNotification.deleteMany({
-      customer: customerId,
-    });
+    await CustomerNotification.deleteAllForCustomer(customerId);
 
     res.json({
       success: true,

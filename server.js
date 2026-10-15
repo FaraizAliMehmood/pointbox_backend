@@ -1,7 +1,7 @@
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
-const connectDB = require('./config/database');
+const { connectDB } = require('./config/database');
 const errorHandler = require('./middleware/errorHandler');
 const languageMiddleware = require('./middleware/language');
 const admin = require('firebase-admin');
@@ -49,7 +49,7 @@ const corsOptions = {
   origin: function (origin, callback) {
     // Allow requests with no origin (like mobile apps or curl requests)
     if (!origin) return callback(null, true);
-    
+
     // List of allowed origins
     const allowedOrigins = [
       'http://localhost:5173',      // Employee app (Vite dev)
@@ -63,7 +63,7 @@ const corsOptions = {
       'https://employee.pointbox.me',
       'https://superadmin.pointbox.me'
     ];
-    
+
     // Check if origin is allowed or if it's a development environment
     if (allowedOrigins.indexOf(origin) !== -1 || process.env.NODE_ENV !== 'production') {
       callback(null, true);
@@ -103,10 +103,6 @@ app.use('/api/customer', customerRoutes);
 app.use('/api/settings', settingsRoutes);
 app.use('/api/review', reviewRoutes);
 app.use('/api/notification', notificationRoutes);
-
-
-
-
 
 // Health check
 app.get('/api/health', (req, res) => {

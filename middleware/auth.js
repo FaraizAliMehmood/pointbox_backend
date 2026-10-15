@@ -32,7 +32,7 @@ const protectSuperAdmin = async (req, res, next) => {
         return res.status(401).json({ success: false, message: 'Not authorized as super admin' });
       }
 
-      req.user = await SuperAdmin.findById(decoded.id).select('-password');
+      req.user = await SuperAdmin.findById(decoded.id);
       if (!req.user || !req.user.isActive) {
         return res.status(401).json({ success: false, message: 'User not found or inactive' });
       }
@@ -64,10 +64,10 @@ const protectAdmin = async (req, res, next) => {
       const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your_jwt_secret_key_here');
 
       if (decoded.role === 'superadmin') {
-        req.user = await SuperAdmin.findById(decoded.id).select('-password');
+        req.user = await SuperAdmin.findById(decoded.id);
         req.userRole = 'superadmin';
       } else if (decoded.role === 'admin') {
-        req.user = await Admin.findById(decoded.id).select('-password');
+        req.user = await Admin.findById(decoded.id);
         req.userRole = 'admin';
         if (!req.user || !req.user.isActive) {
           return res.status(401).json({ success: false, message: 'Admin not found or inactive' });
@@ -105,7 +105,7 @@ const protectCompany = async (req, res, next) => {
         return res.status(401).json({ success: false, message: 'Not authorized as company' });
       }
 
-      req.user = await Company.findById(decoded.id).select('-password');
+      req.user = await Company.findById(decoded.id);
       if (!req.user || !req.user.isActive) {
         return res.status(401).json({ success: false, message: 'Company not found or inactive' });
       }
@@ -139,7 +139,7 @@ const protectEmployee = async (req, res, next) => {
         return res.status(401).json({ success: false, message: 'Not authorized as employee' });
       }
 
-      req.user = await Employee.findById(decoded.id).select('-password').populate('company');
+      req.user = await Employee.findById(decoded.id);
       if (!req.user || !req.user.isActive) {
         return res.status(401).json({ success: false, message: 'Employee not found or inactive' });
       }
@@ -173,7 +173,7 @@ const protectCustomer = async (req, res, next) => {
         return res.status(401).json({ success: false, message: 'Not authorized as customer' });
       }
 
-      req.user = await Customer.findById(decoded.id).select('-password');
+      req.user = await Customer.findById(decoded.id);
       if (!req.user || !req.user.isActive) {
         return res.status(401).json({ success: false, message: 'Customer not found or inactive' });
       }

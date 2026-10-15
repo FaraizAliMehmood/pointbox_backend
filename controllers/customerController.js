@@ -33,21 +33,21 @@ exports.signup = async (req, res) => {
     const { username, email, password, phone, address, country } = req.body;
 
     // Check if customer with this email already exists
-    const existingCustomerByEmail = await Customer.findOne({ email });
+    const existingCustomerByEmail = await Customer.findByEmail(email);
     if (existingCustomerByEmail) {
-      return res.status(400).json({ 
-        success: false, 
-        message: "Customer with this email already exists." 
+      return res.status(400).json({
+        success: false,
+        message: "Customer with this email already exists."
       });
     }
 
     // Check if customer with this phone number already exists
     if (phone) {
-      const existingCustomerByPhone = await Customer.findOne({ phone });
+      const existingCustomerByPhone = await Customer.findByPhone(phone);
       if (existingCustomerByPhone) {
-        return res.status(400).json({ 
-          success: false, 
-          message: "Customer with this phone number already exists." 
+        return res.status(400).json({
+          success: false,
+          message: "Customer with this phone number already exists."
         });
       }
     }
@@ -70,21 +70,15 @@ exports.signup = async (req, res) => {
       `Your otp code is ${otp} and do remember otp will expire after 10 minutes.`
     );
     if (response) {
-      const Data = await Customer.findByIdAndUpdate(
-        { _id: customer._id },
-        { $set: { otp: otp } },
-        { new: true }
-      );
+      await Customer.setOtpByEmail(email, otp);
       res.status(201).json({ success: true, message: "Please check your email." });
     }
   } catch (error) {
-    // Handle MongoDB duplicate key error
-    if (error.code === 11000) {
-      const field = Object.keys(error.keyPattern)[0];
-      const fieldName = field === 'phone' ? 'phone number' : field;
-      return res.status(400).json({ 
-        success: false, 
-        message: `Customer with this ${fieldName} already exists.` 
+    // Handle MySQL duplicate key error (customers.email is the only unique column)
+    if (error.code === 'ER_DUP_ENTRY') {
+      return res.status(400).json({
+        success: false,
+        message: `Customer with this email already exists.`
       });
     }
     res.status(400).json({ success: false, message: error.message });
@@ -102,7 +96,7 @@ exports.login = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Please provide email and password' });
     }
 
-    const customer = await Customer.findOne({ email }).select('+password');
+    const customer = await Customer.findByEmail(email, { includePassword: true });
     if (!customer) {
       return res.status(401).json({ success: false, message: `You don't have an account.Sign up please` });
     }
@@ -110,10 +104,6 @@ exports.login = async (req, res) => {
     if (customer.isGoogleSignup && !password) {
       return res.status(401).json({ success: false, message: 'Please use Google sign in' });
     }
-
-    // if (!customer.isGoogleSignup && !(await customer.comparePassword(password))) {
-    //   return res.status(401).json({ success: false, message: 'Invalid credentials' });
-    // }
 
     const isMatch = await bcrypt.compare(password, customer.password)
     console.log(isMatch)
@@ -128,23 +118,21 @@ exports.login = async (req, res) => {
 
     // Check if email is verified
     if (!customer.emailVerified) {
-      return res.status(401).json({ 
-        success: false, 
-        message: 'Please verify your email before logging in. Check your email for the verification code.' 
+      return res.status(401).json({
+        success: false,
+        message: 'Please verify your email before logging in. Check your email for the verification code.'
       });
     }
-    
+
     // Save device token if provided
     if (deviceToken) {
-      customer.deviceToken = deviceToken;
-      await customer.save();
+      await Customer.updateById(customer.id, { deviceToken });
     }
 
-    const token = generateToken(customer._id, 'customer');
+    const token = generateToken(customer.id, 'customer');
 
-    // Convert to plain object and remove sensitive fields
-    const customerData = customer.toObject();
-    delete customerData.password;
+    // Re-fetch without the password field
+    const customerData = await Customer.findById(customer.id);
 
     res.json({
       success: true,
@@ -177,50 +165,50 @@ function findCurrentTier(companyTiers, tierPoints) {
 // @access  Private (Customer)
 exports.getProfile = async (req, res) => {
   try {
-    console.log("Profile:",req.user._id);
-    const customer = await Customer.findById(req.user._id)
-      .populate('linkedCompanies.company', 'companyName email redeem_points companyLogo');
+    console.log("Profile:",req.user.id);
+    const customer = await Customer.findById(req.user.id);
+    const linkedCompanies = await Customer.getLinkedCompaniesWithDetails(req.user.id);
 
-    const linkedWithCompany = customer.linkedCompanies.filter((link) => link.company);
-    const companyIds = linkedWithCompany.map((link) => link.company._id);
+    const linkedWithCompany = linkedCompanies.filter((link) => link.company);
+    const companyIds = linkedWithCompany.map((link) => link.company);
 
     // Fetch active tiers for all linked companies in one query
-    const tiers = await Tier.find({ createdBy: { $in: companyIds }, isActive: true }).sort({
-      minPoints: 1,
-    });
+    const tiers = companyIds.length > 0
+      ? await Tier.findByCompanies(companyIds, { isActive: true })
+      : [];
+
     const tiersByCompany = {};
     tiers.forEach((tier) => {
-      const key = tier.createdBy.toString();
+      const key = String(tier.createdBy);
       if (!tiersByCompany[key]) tiersByCompany[key] = [];
       tiersByCompany[key].push(tier);
     });
 
-    // Convert customer to plain object and add linkedBrands array for frontend compatibility
-    const customerData = customer.toObject();
+    const customerData = { ...customer };
 
     customerData.linkedCompanies = linkedWithCompany.map((link) => {
-      const linkObj = link.toObject();
-      const companyTiers = tiersByCompany[link.company._id.toString()] || [];
+      const companyTiers = tiersByCompany[String(link.company)] || [];
       const currentTier = findCurrentTier(companyTiers, link.tier_points);
 
-      linkObj.tier = currentTier
-        ? {
-            id: currentTier._id,
-            name: currentTier.name,
-            color: currentTier.color,
-            minPoints: currentTier.minPoints,
-            maxPoints: currentTier.maxPoints ?? null,
-            expiryMonths: currentTier.expiryMonths ?? null,
-            expiryDate: currentTier.expiryMonths
-              ? moment(link.linkedAt).add(currentTier.expiryMonths, 'months').toDate()
-              : null,
-          }
-        : null;
-
-      return linkObj;
+      return {
+        ...link,
+        tier: currentTier
+          ? {
+              id: currentTier.id,
+              name: currentTier.name,
+              color: currentTier.color,
+              minPoints: currentTier.minPoints,
+              maxPoints: currentTier.maxPoints ?? null,
+              expiryMonths: currentTier.expiryMonths ?? null,
+              expiryDate: currentTier.expiryMonths
+                ? moment(link.linkedAt).add(currentTier.expiryMonths, 'months').toDate()
+                : null,
+            }
+          : null,
+      };
     });
 
-    customerData.linkedBrands = linkedWithCompany.map((link) => link.company._id.toString());
+    customerData.linkedBrands = linkedWithCompany.map((link) => String(link.company));
 
     res.json({
       success: true,
@@ -236,10 +224,16 @@ exports.getProfile = async (req, res) => {
 // @access  Private (Customer)
 exports.updateProfile = async (req, res) => {
   try {
-    const customer = await Customer.findByIdAndUpdate(req.user._id, req.body, {
-      new: true,
-      runValidators: true,
-    });
+    const { username, email, phone, address, country, password } = req.body;
+    const updates = {};
+    if (username !== undefined) updates.username = username;
+    if (email !== undefined) updates.email = email;
+    if (phone !== undefined) updates.phone = phone;
+    if (address !== undefined) updates.address = address;
+    if (country !== undefined) updates.country = country;
+    if (password) updates.password = await bcrypt.hash(password, 10);
+
+    const customer = await Customer.updateById(req.user.id, updates);
 
     res.json({
       success: true,
@@ -263,16 +257,14 @@ exports.redeemPoints = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Product not found' });
     }
 
-    const customer = await Customer.findById(req.user._id);
+    const customer = await Customer.findById(req.user.id);
 
-    if (customer.totalPoints < product.points) {
+    if (customer.totalPoints < product.redeem_points) {
       return res.status(400).json({ success: false, message: 'Insufficient points' });
     }
 
     // Check if customer is linked to the product's company
-    const isLinked = customer.linkedCompanies.some(
-      (link) => link.company.toString() === product.company.toString()
-    );
+    const isLinked = await Customer.isLinkedToCompany(customer.id, product.company);
 
     if (!isLinked) {
       return res.status(403).json({ success: false, message: 'Product not available for your account' });
@@ -281,28 +273,27 @@ exports.redeemPoints = async (req, res) => {
     // Create transaction
     const transaction = await Transaction.create({
       transactionId: `TXN${Date.now()}${Math.floor(Math.random() * 10000)}`,
-      customer: customer._id,
+      customer: customer.id,
       customerName: customer.username,
       customerEmail: customer.email,
       customerPhone: customer.phone,
       company: product.company,
       companyName: product.companyName,
       type: 'redeem',
-      points: product.points,
+      redeem_points: product.redeem_points,
       notes: `Redeemed: ${product.name}`,
     });
 
     // Update customer points
-    customer.totalPoints -= product.points;
-    customer.redeemedPoints += product.points;
-    await customer.save();
+    const remainingPoints = customer.totalPoints - product.redeem_points;
+    await Customer.updateById(customer.id, { totalPoints: remainingPoints });
 
     res.status(201).json({
       success: true,
       data: {
         transaction,
         product,
-        remainingPoints: customer.totalPoints,
+        remainingPoints,
       },
     });
   } catch (error) {
@@ -315,9 +306,7 @@ exports.redeemPoints = async (req, res) => {
 // @access  Private (Customer)
 exports.getTransactions = async (req, res) => {
   try {
-    const transactions = await Transaction.find({ customer: req.user._id })
-      .populate('company', 'companyName companyLogo')
-      .sort({ createdAt: -1 });
+    const transactions = await Transaction.findAll({ customerId: req.user.id });
     console.log(transactions);
 
     res.json({ success: true, data: transactions });
@@ -354,21 +343,13 @@ exports.contactSupport = async (req, res) => {
     const { subject, message, brandId } = req.body;
 
     const query = await Query.create({
-      customer: req.user._id,
+      customer: req.user.id,
       customerEmail: req.user.email,
       customerName: req.user.username,
       subject,
       message,
       brandId,
     });
-
-    // Send email to admin
-    // await sendEmail(
-    //   process.env.EMAIL_USER,
-    //   `Customer Query: ${subject}`,
-    //   `From: ${req.user.email}\n\n${message}`,
-    //   `<p><strong>From:</strong> ${req.user.email}</p><p>${message}</p>`
-    // );
 
     res.status(201).json({
       success: true,
@@ -404,19 +385,11 @@ exports.submitContact = async (req, res) => {
       status: 'new',
     });
 
-    // Optionally send email notification to admin
-    // await sendEmail(
-    //   process.env.EMAIL_USER,
-    //   `New Contact Form Submission: ${subject}`,
-    //   `From: ${name} (${email})${phone ? `\nPhone: ${phone}` : ''}\n\nSubject: ${subject}\n\nMessage:\n${message}`,
-    //   `<p><strong>From:</strong> ${name} (${email})${phone ? `<br><strong>Phone:</strong> ${phone}` : ''}</p><p><strong>Subject:</strong> ${subject}</p><p>${message}</p>`
-    // );
-
     res.status(201).json({
       success: true,
       message: 'Your message has been sent successfully. We will get back to you soon!',
       data: {
-        id: contact._id,
+        id: contact.id,
         name: contact.name,
         email: contact.email,
         subject: contact.subject,
@@ -425,16 +398,7 @@ exports.submitContact = async (req, res) => {
     });
   } catch (error) {
     console.error('Contact form error:', error);
-    
-    // Handle validation errors from mongoose
-    if (error.name === 'ValidationError') {
-      const messages = Object.values(error.errors).map(err => err.message);
-      return res.status(400).json({
-        success: false,
-        message: messages.join(', '),
-      });
-    }
-    
+
     res.status(400).json({
       success: false,
       message: error.message || 'Failed to send message. Please try again.',
@@ -447,8 +411,7 @@ exports.submitContact = async (req, res) => {
 // @access  Public
 exports.getBanners = async (req, res) => {
   try {
-    const banners = await Banner.find({ isActive: true })
-      .sort({ createdAt: -1 });
+    const banners = await Banner.findAll({ isActive: true });
 
     // Filter out special_events banners where endDate has passed
     const currentDate = new Date();
@@ -476,7 +439,7 @@ exports.getBanners = async (req, res) => {
 // @access  Public
 exports.getWhatsNews = async (req, res) => {
   try {
-    const whatsNews = await WhatsNew.find({ isActive: true }).sort({ order: 1, createdAt: -1 });
+    const whatsNews = await WhatsNew.findAll({ isActive: true });
     res.json({ success: true, data: whatsNews });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
@@ -488,9 +451,7 @@ exports.getWhatsNews = async (req, res) => {
 // @access  Public
 exports.getTopBanners = async (req, res) => {
   try {
-    const topBanners = await Banner.find({ isActive: true })
-      .sort({ points: -1 })
-      .limit(3);
+    const topBanners = await Banner.findTopByPoints(3);
     res.json({ success: true, data: topBanners });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
@@ -502,10 +463,14 @@ exports.getTopBanners = async (req, res) => {
 // @access  Public
 exports.getRecentCompanies = async (req, res) => {
   try {
-    const recentCompanies = await Company.find({ isActive: true })
-      .select('companyName companyLogo country createdAt')
-      .sort({ createdAt: -1 })
-      .limit(3);
+    const companies = await Company.findAll({ isActive: true });
+    const recentCompanies = companies.slice(0, 3).map((c) => ({
+      id: c.id,
+      companyName: c.companyName,
+      companyLogo: c.companyLogo,
+      country: c.country,
+      createdAt: c.createdAt,
+    }));
     res.json({ success: true, data: recentCompanies });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
@@ -517,10 +482,17 @@ exports.getRecentCompanies = async (req, res) => {
 // @access  Public
 exports.getBrands = async (req, res) => {
   try {
-    const companies = await Company.find({ isActive: true })
-      .select('companyName email address country companyLogo');
+    const companies = await Company.findAll({ isActive: true });
+    const data = companies.map((c) => ({
+      id: c.id,
+      companyName: c.companyName,
+      email: c.email,
+      address: c.address,
+      country: c.country,
+      companyLogo: c.companyLogo,
+    }));
 
-    res.json({ success: true, data: companies });
+    res.json({ success: true, data });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
@@ -534,79 +506,63 @@ exports.linkBrand = async (req, res) => {
     const { brandId } = req.body;
 
     if (!brandId) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'Brand ID is required' 
+      return res.status(400).json({
+        success: false,
+        message: 'Brand ID is required'
       });
     }
 
     // Check if company/brand exists and is active
     const company = await Company.findById(brandId);
     if (!company) {
-      return res.status(404).json({ 
-        success: false, 
-        message: 'Brand not found' 
+      return res.status(404).json({
+        success: false,
+        message: 'Brand not found'
       });
     }
 
     if (!company.isActive) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'Brand is not active' 
+      return res.status(400).json({
+        success: false,
+        message: 'Brand is not active'
       });
     }
 
     // Get customer
-    const customer = await Customer.findById(req.user._id);
+    const customer = await Customer.findById(req.user.id);
     if (!customer) {
-      return res.status(404).json({ 
-        success: false, 
-        message: 'Customer not found' 
+      return res.status(404).json({
+        success: false,
+        message: 'Customer not found'
       });
     }
 
     // Check if already linked
-    const isLinked = customer.linkedCompanies.some(
-      (link) => link.company.toString() === brandId.toString()
-    );
+    const isLinked = await Customer.isLinkedToCompany(customer.id, brandId);
 
     if (isLinked) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'Brand is already linked' 
+      return res.status(400).json({
+        success: false,
+        message: 'Brand is already linked'
       });
     }
 
     // Add link
-    customer.linkedCompanies.push({
-      company: brandId,
-      companyName: company.companyName,
-      linkedAt: new Date(),
-    });
+    await Customer.linkCompany(customer.id, brandId, company.companyName);
 
-    await customer.save();
+    // Get updated linked companies with populated company details
+    const linkedCompanies = await Customer.getLinkedCompaniesWithDetails(req.user.id);
 
-    // Get updated customer with populated data
-    const updatedCustomer = await Customer.findById(req.user._id)
-      .populate('linkedCompanies.company', 'companyName email address country');
-
-    // Return linkedBrands as array of IDs for frontend compatibility
-    const linkedBrands = updatedCustomer.linkedCompanies
-      .filter((link) => link.company) // Filter out any null/undefined companies
-      .map((link) => {
-        // Handle both populated and non-populated cases
-        if (link.company && typeof link.company === 'object' && link.company._id) {
-          return link.company._id.toString();
-        }
-        return link.company.toString();
-      });
+    const linkedBrands = linkedCompanies
+      .filter((link) => link.company)
+      .map((link) => String(link.company));
 
     res.json({
       success: true,
       message: 'Brand linked successfully',
       data: {
         linkedBrands,
-        customer: updatedCustomer,
+        customer: { ...customer, linkedCompanies },
       },
     });
   } catch (error) {
@@ -619,12 +575,11 @@ exports.linkBrand = async (req, res) => {
 // @access  Private (Customer)
 exports.getLinkedBrands = async (req, res) => {
   try {
-    const customer = await Customer.findById(req.user._id)
-      .populate('linkedCompanies.company', 'companyName email address country companyLogo');
+    const linkedCompanies = await Customer.getLinkedCompaniesWithDetails(req.user.id);
 
     res.json({
       success: true,
-      data: customer.linkedCompanies,
+      data: linkedCompanies,
     });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
@@ -636,13 +591,12 @@ exports.getLinkedBrands = async (req, res) => {
 // @access  Private (Customer)
 exports.getProducts = async (req, res) => {
   try {
-    const customer = await Customer.findById(req.user._id);
-    const linkedCompanyIds = customer.linkedCompanies.map((link) => link.company);
+    const linkedCompanies = await Customer.getLinkedCompanies(req.user.id);
+    const linkedCompanyIds = linkedCompanies.map((link) => link.company);
 
-    const products = await Product.find({
-      company: { $in: linkedCompanyIds },
-      isActive: true,
-    }).populate('company', 'companyName companyLogo');
+    const products = linkedCompanyIds.length > 0
+      ? await Product.findAll({ companyIds: linkedCompanyIds, isActive: true })
+      : [];
 
     res.json({ success: true, data: products });
   } catch (error) {
@@ -655,11 +609,7 @@ exports.getProducts = async (req, res) => {
 // @access  Private (Customer)
 exports.deleteAccount = async (req, res) => {
   try {
-    const customer = await Customer.findById(req.user._id);
-
-    // Deactivate instead of delete
-    customer.isActive = false;
-    await customer.save();
+    await Customer.updateById(req.user.id, { isActive: false });
 
     res.json({ success: true, message: 'Account deactivated successfully' });
   } catch (error) {
@@ -675,55 +625,33 @@ exports.registerFCMToken = async (req, res) => {
     const { token, deviceType = 'mobile' } = req.body;
 
     if (!token) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'FCM token is required' 
+      return res.status(400).json({
+        success: false,
+        message: 'FCM token is required'
       });
     }
 
     if (!['mobile', 'web'].includes(deviceType)) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'Device type must be "mobile" or "web"' 
+      return res.status(400).json({
+        success: false,
+        message: 'Device type must be "mobile" or "web"'
       });
     }
 
-    const customer = await Customer.findById(req.user._id);
+    const customer = await Customer.findById(req.user.id);
 
     if (!customer) {
       return res.status(404).json({ success: false, message: 'Customer not found' });
     }
 
-    // Initialize fcmTokens array if it doesn't exist
-    if (!customer.fcmTokens) {
-      customer.fcmTokens = [];
-    }
-
-    // Check if token already exists
-    const existingTokenIndex = customer.fcmTokens.findIndex(
-      (fcmTokenObj) => fcmTokenObj.token === token
-    );
-
-    if (existingTokenIndex !== -1) {
-      // Update existing token
-      customer.fcmTokens[existingTokenIndex].deviceType = deviceType;
-      customer.fcmTokens[existingTokenIndex].updatedAt = new Date();
-    } else {
-      // Add new token
-      customer.fcmTokens.push({
-        token,
-        deviceType,
-        updatedAt: new Date(),
-      });
-    }
-
-    await customer.save();
+    // Customers only keep a single device token column (not a multi-device table like employees)
+    await Customer.updateById(req.user.id, { deviceToken: token });
 
     res.json({
       success: true,
       message: 'FCM token registered successfully',
       data: {
-        tokenCount: customer.fcmTokens.length,
+        tokenCount: 1,
       },
     });
   } catch (error) {
@@ -739,24 +667,20 @@ exports.removeFCMToken = async (req, res) => {
     const { token } = req.body;
 
     if (!token) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'FCM token is required' 
+      return res.status(400).json({
+        success: false,
+        message: 'FCM token is required'
       });
     }
 
-    const customer = await Customer.findById(req.user._id);
+    const customer = await Customer.findById(req.user.id);
 
     if (!customer) {
       return res.status(404).json({ success: false, message: 'Customer not found' });
     }
 
-    // Remove token if it exists
-    if (customer.fcmTokens) {
-      customer.fcmTokens = customer.fcmTokens.filter(
-        (fcmTokenObj) => fcmTokenObj.token !== token
-      );
-      await customer.save();
+    if (customer.deviceToken === token) {
+      await Customer.updateById(req.user.id, { deviceToken: null });
     }
 
     res.json({
@@ -776,39 +700,17 @@ exports.getNotifications = async (req, res) => {
     const { page = 1, limit = 20 } = req.query;
     const skip = (page - 1) * limit;
 
-    // Get customer with linked companies
-    const customer = await Customer.findById(req.user._id).select('linkedCompanies.company');
-    const linkedCompanyIds = customer.linkedCompanies.map(l => l.company);
-
-    // Build query conditions
-    const queryConditions = [
-      { target: 'all' },
-      { target: 'customers' },
-      { target: 'specific', targetIds: req.user._id },
-    ];
-
-    // Add company condition if customer has linked companies
-    if (linkedCompanyIds.length > 0) {
-      queryConditions.push({
-        target: 'company',
-        company: { $in: linkedCompanyIds },
-      });
-    }
+    // Get customer's linked companies
+    const linkedCompanies = await Customer.getLinkedCompanies(req.user.id);
+    const linkedCompanyIds = linkedCompanies.map((link) => link.company);
 
     // Get notifications for this customer
-    const notifications = await Notification.find({
-      $or: queryConditions,
-      isActive: true,
-    })
-      .sort({ createdAt: -1 })
-      .skip(skip)
-      .limit(parseInt(limit))
-      .select('title message type createdAt');
-
-    const total = await Notification.countDocuments({
-      $or: queryConditions,
-      isActive: true,
+    const notifications = await Notification.findForCustomer(req.user.id, linkedCompanyIds, {
+      limit: parseInt(limit),
+      offset: skip,
     });
+
+    const total = await Notification.countForCustomer(req.user.id, linkedCompanyIds);
 
     res.json({
       success: true,
@@ -830,15 +732,15 @@ exports.getSettings = async (req, res) => {
     const settings = await Settings.findOne();
 
     if (!settings) {
-      return res.status(404).json({ 
-        success: false, 
-        message: 'Settings not found' 
+      return res.status(404).json({
+        success: false,
+        message: 'Settings not found'
       });
     }
 
-    res.json({ 
-      success: true, 
-      data: settings 
+    res.json({
+      success: true,
+      data: settings
     });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
@@ -850,18 +752,18 @@ exports.createNewsletterEmail = async (req, res) => {
     const { email, source } = req.body;
 
     if (!email) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'Email is required' 
+      return res.status(400).json({
+        success: false,
+        message: 'Email is required'
       });
     }
 
     // Check if email already exists
-    const existingEmail = await NewsLetterEmails.findOne({ email: email.toLowerCase().trim() });
+    const existingEmail = await NewsLetterEmails.findByEmail(email.toLowerCase().trim());
     if (existingEmail) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'This email is already subscribed' 
+      return res.status(400).json({
+        success: false,
+        message: 'This email is already subscribed'
       });
     }
 
@@ -877,10 +779,10 @@ exports.createNewsletterEmail = async (req, res) => {
     });
   } catch (error) {
     // Handle duplicate key error (unique constraint)
-    if (error.code === 11000) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'This email is already subscribed' 
+    if (error.code === 'ER_DUP_ENTRY') {
+      return res.status(400).json({
+        success: false,
+        message: 'This email is already subscribed'
       });
     }
     res.status(400).json({ success: false, message: error.message });
@@ -889,7 +791,7 @@ exports.createNewsletterEmail = async (req, res) => {
 
 exports.getCompanies = async (req, res) => {
   try {
-    const companies = await Company.find();
+    const companies = await Company.findAll();
     res.json({ success: true, data: companies });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
@@ -899,7 +801,7 @@ exports.getCompanies = async (req, res) => {
 exports.getCompanyProducts = async (req, res) => {
   try {
     console.log("product is calling from the company panel")
-    const products = await Product.find({ company: req.body.id }).sort({ createdAt: -1 });
+    const products = await Product.findAll({ company: req.body.id });
     res.json({ success: true, data: products });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
@@ -907,7 +809,7 @@ exports.getCompanyProducts = async (req, res) => {
 };
 exports.getFAQs = async (req, res) => {
   try {
-    const faqs = await FAQ.find().sort({ order: 1, createdAt: -1 });
+    const faqs = await FAQ.findAll();
     res.json({ success: true, data: faqs });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
@@ -915,9 +817,7 @@ exports.getFAQs = async (req, res) => {
 };
 exports.getNewsletters = async (req, res) => {
   try {
-    const newsletters = await NewsLetters.find()
-      .populate('createdBy', 'username email')
-      .sort({ createdAt: -1 });
+    const newsletters = await NewsLetters.findAll();
     res.json({ success: true, data: newsletters });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
@@ -925,26 +825,16 @@ exports.getNewsletters = async (req, res) => {
 };
 exports.getBrandsBanners = async (req, res) => {
   try {
-    const banners = await Banner.find().sort({ createdAt: -1 });
+    const banners = await Banner.findAll();
     res.json({ success: true, data: banners });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
 };
 
-function generateOTP() {
-  const otp = Math.floor(1000 + Math.random() * 9000);
-  return otp.toString();
-}
-//check otp expiration
-function isOTPExpired(createdAt){
-    const expirationTime = moment(createdAt).add(10,"minutes")
-    return moment()>expirationTime;
-}
-
 exports.checkEmail = async(req,res)=>{
   try {
-    const data = await Customer.findOne({email: req.body.email})
+    const data = await Customer.findByEmail(req.body.email);
     if(!data){
        return res.status(401).json({message: "Email with this account does not exist."})
     }
@@ -955,11 +845,8 @@ exports.checkEmail = async(req,res)=>{
       `Your otp code is ${otp} and do remember otp will expire after 10 minutes.`
     );
          if(response){
-          const Data = await Customer.findByIdAndUpdate(
-            {_id: data._id},
-            {$set: {otp: otp}},
-             {new: true});
-             res.status(200).json({success: true, message: "OTP sent successfully. Please check your email."})
+          await Customer.setOtpByEmail(req.body.email, otp);
+          res.status(200).json({success: true, message: "OTP sent successfully. Please check your email."})
          }
   } catch (error) {
     res.status(400).json({ success: false, message: error.message });
@@ -967,19 +854,16 @@ exports.checkEmail = async(req,res)=>{
 }
 exports.verifyOtp = async(req,res)=>{
   try {
-      let user = await Customer.findOne({otp: req.body.otp});
+      const user = await Customer.findByOtp(req.body.otp);
       if(!user){
         return res.status(400).json({success:false, message: "Code not found"})
       }else{
-         
+
          const isExpired = isOTPExpired(user.updatedAt);
           if(isExpired){
-               res.status(400).json({success:false, message: "Your otp is expired"})
+               return res.status(400).json({success:false, message: "Your otp is expired"})
           }else{
-              const Data = await Customer.findByIdAndUpdate(
-                  {_id: user._id},
-                  {$set: {otp: 0, emailVerified: true}},
-                  {new: true}).select("-password");
+              const Data = await Customer.updateById(user.id, { otp: 0, emailVerified: true });
      res.status(200).json({success: true, message:"account verified successfully", email: Data.email});
           }
           }
@@ -991,19 +875,16 @@ exports.verifyOtp = async(req,res)=>{
 
 exports.verifyPassOtp = async(req,res)=>{
   try {
-      let user = await Customer.findOne({otp: req.body.otp});
+      const user = await Customer.findByOtp(req.body.otp);
       if(!user){
         return res.status(400).json({success:false, message: "Code not found"})
       }else{
-         
+
          const isExpired = isOTPExpired(user.updatedAt);
           if(isExpired){
-               res.status(400).json({success:false, message: "Your otp is expired"})
+               return res.status(400).json({success:false, message: "Your otp is expired"})
           }else{
-              const Data = await Customer.findByIdAndUpdate(
-                  {_id: user._id},
-                  {$set: {otp: 0}},
-                  {new: true}).select("-password");
+              const Data = await Customer.updateById(user.id, { otp: 0 });
      res.status(200).json({success: true, message:"account verified successfully", email: Data.email});
           }
           }
@@ -1019,62 +900,60 @@ exports.changePasswordWithOTP = async (req, res) => {
 
     // Validate required fields
     if (!email || !newPassword) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'Email and new password are required' 
+      return res.status(400).json({
+        success: false,
+        message: 'Email and new password are required'
       });
     }
 
     // Validate new password length
     if (newPassword.length < 6) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'New password must be at least 6 characters long' 
+      return res.status(400).json({
+        success: false,
+        message: 'New password must be at least 6 characters long'
       });
     }
 
     // Find the admin by email
-    const customer = await Customer.findOne({ email: email.toLowerCase().trim() }).select('+password');
+    const customer = await Customer.findByEmail(email.toLowerCase().trim(), { includePassword: true });
 
     if (!customer) {
-      return res.status(404).json({ 
-        success: false, 
-        message: 'Admin not found' 
+      return res.status(404).json({
+        success: false,
+        message: 'Admin not found'
       });
     }
 
     // Verify that OTP was verified (OTP should be 0 after verification)
     if (customer.otp !== 0) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'Please verify OTP first' 
+      return res.status(400).json({
+        success: false,
+        message: 'Please verify OTP first'
       });
     }
 
     // Hash the new password
     const hashedPassword = await bcrypt.hash(newPassword, 10);
-    
-    // Update password and reset OTP
-    customer.password = hashedPassword;
-    customer.otp = 0;
-    await customer.save();
 
-    res.json({ 
-      success: true, 
+    // Update password and reset OTP
+    await Customer.updateById(customer.id, { password: hashedPassword, otp: 0 });
+
+    res.json({
+      success: true,
       message: 'Password updated successfully'
     });
   } catch (error) {
     console.log(error.message);
-    res.status(500).json({ 
-      success: false, 
-      message: 'Internal server error' 
+    res.status(500).json({
+      success: false,
+      message: 'Internal server error'
     });
   }
 };
 
 exports.getTerms = async (req, res) => {
   try {
-    const terms = await Terms.find().sort({ createdAt: -1 });
+    const terms = await Terms.findAll();
     res.json({ success: true, data: terms });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
@@ -1084,8 +963,8 @@ exports.getTerms = async (req, res) => {
 exports.getSEO = async (req, res) => {
   try {
     const seo = await SEO.getSEO();
-    res.json({ 
-      success: true, 
+    res.json({
+      success: true,
       data: {
         metaTitle: seo.metaTitle || '',
         metaDescription: seo.metaDescription || '',

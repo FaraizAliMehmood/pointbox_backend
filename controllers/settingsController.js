@@ -7,9 +7,9 @@ const { uploadToCloudinary, deleteFromCloudinary } = require('../utils/cloudinar
 exports.uploadLogo = async (req, res) => {
   try {
     if (!req.file) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'Please upload a logo image' 
+      return res.status(400).json({
+        success: false,
+        message: 'Please upload a logo image'
       });
     }
 
@@ -22,9 +22,9 @@ exports.uploadLogo = async (req, res) => {
       logoUrl = result.secure_url;
       publicId = result.public_id;
     } catch (uploadError) {
-      return res.status(400).json({ 
-        success: false, 
-        message: `Failed to upload logo: ${uploadError.message}` 
+      return res.status(400).json({
+        success: false,
+        message: `Failed to upload logo: ${uploadError.message}`
       });
     }
 
@@ -43,9 +43,7 @@ exports.uploadLogo = async (req, res) => {
       }
 
       // Update logo
-      settings.logoUrl = logoUrl;
-      settings.publicId = publicId;
-      await settings.save();
+      settings = await Settings.updateById(settings.id, { logoUrl, publicId });
     } else {
       // Create new settings with default values
       // Address is required by the model, so provide placeholder that can be updated later
@@ -77,15 +75,15 @@ exports.getSettings = async (req, res) => {
     const settings = await Settings.findOne();
 
     if (!settings) {
-      return res.status(404).json({ 
-        success: false, 
-        message: 'Settings not found' 
+      return res.status(404).json({
+        success: false,
+        message: 'Settings not found'
       });
     }
 
-    res.json({ 
-      success: true, 
-      data: settings 
+    res.json({
+      success: true,
+      data: settings
     });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
@@ -104,28 +102,29 @@ exports.updateSettings = async (req, res) => {
 
     if (settings) {
       // Update fields
-      if (termsCondition !== undefined) settings.termsCondition = termsCondition;
-      if (address !== undefined) settings.address = address;
-      if (phone !== undefined) settings.phone = phone;
-      if (email !== undefined) settings.email = email;
-      if (location !== undefined) settings.location = location;
-      if (instagram !== undefined) settings.instagram = instagram;
-      if (facebook !== undefined) settings.facebook = facebook;
-      if (x !== undefined) settings.x = x;
-      if (youtube !== undefined) settings.youtube = youtube;
-      if (tiktok !== undefined) settings.tiktok = tiktok;
-      if (linkedin !== undefined) settings.linkedin = linkedin;
+      const updates = {};
+      if (termsCondition !== undefined) updates.termsCondition = termsCondition;
+      if (address !== undefined) updates.address = address;
+      if (phone !== undefined) updates.phone = phone;
+      if (email !== undefined) updates.email = email;
+      if (location !== undefined) updates.location = location;
+      if (instagram !== undefined) updates.instagram = instagram;
+      if (facebook !== undefined) updates.facebook = facebook;
+      if (x !== undefined) updates.x = x;
+      if (youtube !== undefined) updates.youtube = youtube;
+      if (tiktok !== undefined) updates.tiktok = tiktok;
+      if (linkedin !== undefined) updates.linkedin = linkedin;
 
-      await settings.save();
+      settings = await Settings.updateById(settings.id, updates);
     } else {
       // Create new settings
       // Both address and logoUrl are required, so we need to provide defaults
       // If address is not provided, use empty string (will fail validation if truly required)
       // For logoUrl, use a placeholder that will be replaced when logo is uploaded
       if (!address) {
-        return res.status(400).json({ 
-          success: false, 
-          message: 'Address is required. Please provide address when creating settings.' 
+        return res.status(400).json({
+          success: false,
+          message: 'Address is required. Please provide address when creating settings.'
         });
       }
 
@@ -146,8 +145,8 @@ exports.updateSettings = async (req, res) => {
       });
     }
 
-    res.json({ 
-      success: true, 
+    res.json({
+      success: true,
       data: settings,
       message: 'Settings updated successfully',
     });
@@ -155,4 +154,3 @@ exports.updateSettings = async (req, res) => {
     res.status(400).json({ success: false, message: error.message });
   }
 };
-
