@@ -61,7 +61,10 @@ const corsOptions = {
       'https://admin.pointbox.me',
       'https://company.pointbox.me',
       'https://employee.pointbox.me',
-      'https://superadmin.pointbox.me'
+      'https://superadmin.pointbox.me',
+      'https://pointbox-super-admin-psi.vercel.app',
+      'https://pointbox-main.vercel.app'
+
     ];
 
     // Check if origin is allowed or if it's a development environment
