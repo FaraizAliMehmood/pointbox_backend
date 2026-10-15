@@ -55,6 +55,7 @@ const {
   getSuperAdmins,
   updateSuperAdminPassword,
   getContacts,
+  respondToContact,
   checkEmail,
   verifyOtp,
   notifications,
@@ -155,7 +156,7 @@ router.put('/change-password', updateSuperAdminPassword);
 
 router.get("/contacts", getContacts);
 
-// router.post("/contacts/:id/respond", protectSuperAdmin, respondToContact);
+router.post("/contacts/:id/respond", protectSuperAdmin, respondToContact);
 
 // SEO routes
 router.get('/seo', protectSuperAdmin, getSEO);
