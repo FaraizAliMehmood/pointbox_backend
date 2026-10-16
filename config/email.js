@@ -17,7 +17,7 @@ const sendEmail = async (to, subject, text, html) => {
   try {
     console.log(process.env.EMAIL_FROM);
     const info = await transporter.sendMail({
-      from: "sapport@pointbox.me",
+      from: process.env.EMAIL_FROM,
       to,
       subject,
       text,
