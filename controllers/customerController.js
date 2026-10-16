@@ -203,6 +203,10 @@ exports.getProfile = async (req, res) => {
               expiryDate: currentTier.expiryMonths
                 ? moment(link.linkedAt).add(currentTier.expiryMonths, 'months').toDate()
                 : null,
+              earnRate: currentTier.earnRate ?? null,
+              birthdayPoints: currentTier.birthdayPoints ?? null,
+              validFrom: currentTier.validFrom ?? null,
+              validTo: currentTier.validTo ?? null,
             }
           : null,
       };

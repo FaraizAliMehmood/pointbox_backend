@@ -12,6 +12,14 @@ const parseBenefits = (value) => {
   return value;
 };
 
+// MySQL DATE columns come back as JS Date objects; normalize to YYYY-MM-DD
+// so the frontend can drop the value straight into an <input type="date">.
+const formatDateOnly = (value) => {
+  if (!value) return null;
+  if (typeof value === 'string') return value.slice(0, 10);
+  return value.toISOString().slice(0, 10);
+};
+
 // Maps a tiers row to the camelCase shape the rest of the app expects
 // (mirrors what a Mongoose document looked like: id, isActive, createdAt, updatedAt).
 const mapRow = (row) => {
@@ -28,6 +36,10 @@ const mapRow = (row) => {
     featured: !!row.featured,
     benefits: parseBenefits(row.benefits),
     expiryMonths: row.expiry_months,
+    earnRate: row.earn_rate !== null && row.earn_rate !== undefined ? Number(row.earn_rate) : null,
+    birthdayPoints: row.birthday_points,
+    validFrom: formatDateOnly(row.valid_from),
+    validTo: formatDateOnly(row.valid_to),
     order: row.order,
     isActive: !!row.is_active,
     createdBy: row.created_by,
@@ -71,8 +83,8 @@ exports.findByCompanies = async (companyIds = [], { isActive } = {}) => {
 exports.create = async (data) => {
   const [result] = await pool.query(
     `INSERT INTO tiers
-      (name, color, bg_color, border_color, min_points, max_points, featured, benefits, expiry_months, \`order\`, is_active, created_by)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      (name, color, bg_color, border_color, min_points, max_points, featured, benefits, expiry_months, earn_rate, birthday_points, valid_from, valid_to, \`order\`, is_active, created_by)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       data.name,
       data.color || 'from-gray-400 to-gray-500',
@@ -83,6 +95,10 @@ exports.create = async (data) => {
       data.featured ? 1 : 0,
       JSON.stringify(data.benefits ?? []),
       data.expiryMonths ?? null,
+      data.earnRate ?? null,
+      data.birthdayPoints ?? null,
+      data.validFrom ?? null,
+      data.validTo ?? null,
       data.order ?? 0,
       data.isActive !== undefined ? (data.isActive ? 1 : 0) : 1,
       data.createdBy,
@@ -101,6 +117,10 @@ exports.updateById = async (id, updates = {}) => {
     maxPoints: 'max_points',
     featured: 'featured',
     expiryMonths: 'expiry_months',
+    earnRate: 'earn_rate',
+    birthdayPoints: 'birthday_points',
+    validFrom: 'valid_from',
+    validTo: 'valid_to',
     order: '`order`',
     isActive: 'is_active',
   };

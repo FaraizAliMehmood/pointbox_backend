@@ -849,6 +849,10 @@ exports.createTier = async (req, res) => {
       featured: req.body.featured,
       benefits: Array.isArray(req.body.benefits) ? req.body.benefits : [],
       expiryMonths: req.body.expiryMonths,
+      earnRate: req.body.earnRate,
+      birthdayPoints: req.body.birthdayPoints,
+      validFrom: req.body.validFrom,
+      validTo: req.body.validTo,
       order: req.body.order,
       isActive: req.body.isActive,
       createdBy: req.user.id,
@@ -881,6 +885,10 @@ exports.updateTier = async (req, res) => {
     if (req.body.featured !== undefined) updates.featured = req.body.featured;
     if (req.body.benefits !== undefined) updates.benefits = Array.isArray(req.body.benefits) ? req.body.benefits : tier.benefits;
     if (req.body.expiryMonths !== undefined) updates.expiryMonths = req.body.expiryMonths;
+    if (req.body.earnRate !== undefined) updates.earnRate = req.body.earnRate;
+    if (req.body.birthdayPoints !== undefined) updates.birthdayPoints = req.body.birthdayPoints;
+    if (req.body.validFrom !== undefined) updates.validFrom = req.body.validFrom;
+    if (req.body.validTo !== undefined) updates.validTo = req.body.validTo;
     if (req.body.order !== undefined) updates.order = req.body.order;
     if (req.body.isActive !== undefined) updates.isActive = req.body.isActive;
 
