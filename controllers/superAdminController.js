@@ -1694,7 +1694,7 @@ exports.notifications = async (req, res) => {
       return res.status(400).json({ error: "deviceTokens must be an array" });
     }
 
-    const webAppBaseUrl = 'http://localhost:5173';
+    const webAppBaseUrl = process.env.VITE_APP_BASE_URL;
     const iconUrl = `${webAppBaseUrl}/web-app-manifest-192x192.png`;
     const imageUrl = req.body.imageUrl || iconUrl;
 
